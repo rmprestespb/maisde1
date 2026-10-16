@@ -27,6 +27,8 @@ interface Props {
   onSort: (v: SortMode) => void;
   favoritesOnly: boolean;
   onToggleFavoritesOnly: () => void;
+  selectedInstanceId: string | null;
+  onSelectInstance: (id: string | null) => void;
 }
 
 function initials(name: string) {
@@ -48,6 +50,8 @@ export function ContactList({
   onSort,
   favoritesOnly,
   onToggleFavoritesOnly,
+  selectedInstanceId,
+  onSelectInstance,
 }: Props) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col border-r border-border bg-card">
@@ -61,6 +65,24 @@ export function ContactList({
             className="pl-9"
           />
         </div>
+        {instances.length > 1 && (
+          <Select
+            value={selectedInstanceId ?? "all"}
+            onValueChange={(v) => onSelectInstance(v === "all" ? null : v)}
+          >
+            <SelectTrigger className="w-full" aria-label="Filtrar por número">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os números</SelectItem>
+              {instances.map((inst, idx) => (
+                <SelectItem key={inst.id} value={inst.id}>
+                  {`#${idx + 1} · ${inst.label}${inst.phone_number ? ` · ${inst.phone_number}` : ""}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex items-center gap-2">
           <Select value={sort} onValueChange={(v) => onSort(v as SortMode)}>
             <SelectTrigger className="w-full">

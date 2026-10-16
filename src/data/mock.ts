@@ -1,6 +1,7 @@
 import type { Contact, Instance, Message } from "@/types/crm";
 
-export const MAX_INSTANCES = 5;
+// Sem limite de números por cliente (pedido do dono do produto).
+export const MAX_INSTANCES = Number.POSITIVE_INFINITY;
 
 // Números, contatos e mensagens fictícios removidos — agora que a Evolution
 // API está rodando de verdade, essas listas ficam vazias até a próxima etapa

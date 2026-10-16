@@ -56,7 +56,8 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const pollTimer = useRef<number | null>(null);
 
-  const atLimit = existing.length >= max;
+  // Sem limite quando max não é um número finito (ex.: Infinity).
+  const atLimit = Number.isFinite(max) && existing.length >= max;
 
   function stopPolling() {
     if (pollTimer.current !== null) {
@@ -165,7 +166,9 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
             <QrCode className="size-5" /> Seus números de WhatsApp
           </DialogTitle>
           <DialogDescription>
-            {existing.length} de {max} números conectados.
+            {Number.isFinite(max)
+              ? `${existing.length} de ${max} números conectados.`
+              : `${existing.length} ${existing.length === 1 ? "número conectado" : "números conectados"}.`}
           </DialogDescription>
         </DialogHeader>
 

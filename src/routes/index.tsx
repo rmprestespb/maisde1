@@ -190,6 +190,8 @@ function HubShell({
                   onSort={hub.setSort}
                   favoritesOnly={hub.favoritesOnly}
                   onToggleFavoritesOnly={() => hub.setFavoritesOnly((v) => !v)}
+                  selectedInstanceId={hub.selectedInstanceId}
+                  onSelectInstance={hub.setSelectedInstanceId}
                 />
               </div>
               <div className={cn("min-h-0", !showChat && "hidden lg:block")}>
