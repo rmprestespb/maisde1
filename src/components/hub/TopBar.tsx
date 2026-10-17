@@ -62,8 +62,8 @@ export function TopBar({
                 key={inst.id}
                 onClick={() => onSelect(active ? null : inst.id)}
                 className={cn(
-                  "flex shrink-0 snap-start items-center gap-2.5 rounded-full border border-border bg-background px-3 py-1.5 text-left transition-all hover:border-status-online/60",
-                  active && "border-status-online bg-status-online/10 shadow-sm",
+                  "flex shrink-0 snap-start items-center gap-2.5 rounded-full border border-border bg-background px-3 py-1.5 text-left transition-all hover:border-primary/50",
+                  active && "border-primary bg-primary/10 shadow-sm",
                   dimmed && "opacity-55 hover:opacity-100",
                 )}
               >

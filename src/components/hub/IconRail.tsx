@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Users,
+  MessageSquare,
   QrCode,
   Settings,
   LogOut,
@@ -13,8 +13,8 @@ import {
 
 export type NavKey = "contacts" | "instances" | "settings" | "admin";
 
-export const navItems: { key: NavKey; label: string; icon: typeof Users }[] = [
-  { key: "contacts", label: "Contatos / Leads", icon: Users },
+export const navItems: { key: NavKey; label: string; icon: typeof MessageSquare }[] = [
+  { key: "contacts", label: "Conversas", icon: MessageSquare },
   { key: "instances", label: "Instâncias & QR Code", icon: QrCode },
   { key: "settings", label: "Configurações & Webhooks", icon: Settings },
 ];
