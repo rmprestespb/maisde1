@@ -412,6 +412,7 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
   return {
     instances,
     contacts: visibleContacts,
+    allContacts: contacts,
     totalUnread: contacts.reduce((n, c) => n + c.unread_count, 0),
     messages: activeMessages,
     activeContact,
