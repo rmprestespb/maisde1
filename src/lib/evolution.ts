@@ -507,6 +507,11 @@ export type ChatPreview = {
   fromMe: boolean;
   timestampMs: number;
   mediaType: "image" | "video" | "audio" | "document" | null;
+  // Número (instância) que recebeu a conversa + dados prontos pra criar o
+  // contato na lista quando quem escreveu ainda não está nos contatos.
+  instanceName: string;
+  phone: string;
+  avatarHue: number;
 };
 
 // Chaves padrão do Baileys pra cada tipo de mensagem de mídia dentro do
@@ -605,6 +610,9 @@ export const getLatestChats = createServerFn({ method: "GET" })
         fromMe: key["fromMe"] === true,
         timestampMs,
         mediaType,
+        instanceName,
+        phone: formatPhone(remoteJid),
+        avatarHue: hashHue(remoteJid),
       });
     }
     return out;

@@ -86,7 +86,12 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
     return [...list].sort((a, b) => {
       if (sort === "alpha") return a.name.localeCompare(b.name);
       if (sort === "tag") return a.tag.localeCompare(b.tag) || a.name.localeCompare(b.name);
-      return +new Date(b.last_updated) - +new Date(a.last_updated);
+      // Contato sem conversa real ainda (só "Toque para ver a conversa") vale
+      // como "sem data": a data dele é só a da sincronização e não pode
+      // ficar acima de quem acabou de mandar mensagem.
+      const when = (c: Contact) =>
+        c.last_message === CONTACTS_PLACEHOLDER_MESSAGE ? 0 : +new Date(c.last_updated);
+      return when(b) - when(a);
     });
   }, [contacts, selectedInstanceId, search, sort, favoritesOnly]);
 
@@ -163,23 +168,29 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
         if (cancelled) return;
         setContacts((prev) => {
           const byId = new Map(prev.map((c) => [c.id, c]));
-          return real.map((fresh) => {
+          const merged = real.map((fresh) => {
             const existing = byId.get(fresh.id);
             if (!existing) return fresh;
+            const hasRealPreview = existing.last_message !== CONTACTS_PLACEHOLDER_MESSAGE;
             return {
               ...fresh,
               starred: existing.starred,
               unread_count: existing.unread_count,
-              last_message:
-                existing.last_message !== CONTACTS_PLACEHOLDER_MESSAGE
-                  ? existing.last_message
-                  : fresh.last_message,
-              last_updated:
-                +new Date(existing.last_updated) > +new Date(fresh.last_updated)
+              last_message: hasRealPreview ? existing.last_message : fresh.last_message,
+              // Com mensagem real, a data é a dela; a data do contato na API é
+              // só a da sincronização e jogaria a conversa pro lugar errado.
+              last_updated: hasRealPreview
+                ? existing.last_updated
+                : +new Date(existing.last_updated) > +new Date(fresh.last_updated)
                   ? existing.last_updated
                   : fresh.last_updated,
             };
           });
+          // Contatos criados a partir de mensagem recebida (número fora da
+          // agenda) não vêm de /findContacts — não podem sumir aqui.
+          const realIds = new Set(real.map((c) => c.id));
+          const extras = prev.filter((c) => !realIds.has(c.id) && clientInstances.some((ci) => ci.instance_name === c.instance_id));
+          return extras.length ? [...extras, ...merged] : merged;
         });
       } catch (err) {
         console.error("Falha ao consultar contatos do WhatsApp:", err);
@@ -383,8 +394,25 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
         // que houver algo mais novo — mesmo na 1ª consulta (troca o placeholder
         // "Toque para ver a conversa" por texto de verdade). Não-lidas só sobem
         // quando é mensagem nova de verdade (newInbound), nunca na linha de base.
-        setContacts((prev) =>
-          prev.map((c) => {
+        setContacts((prev) => {
+          // Quem escreveu e ainda não está na lista de contatos (número novo,
+          // não salvo na agenda) entra agora, senão a mensagem nunca aparece.
+          const known = new Set(prev.map((c) => `${c.instance_id}|${c.id}`));
+          const stubs: Contact[] = newInbound
+            .filter((chat) => !known.has(`${chat.instanceName}|${chat.contactId}`))
+            .map((chat) => ({
+              id: chat.contactId,
+              name: chat.pushName?.trim() || chat.phone,
+              phone: chat.phone,
+              instance_id: chat.instanceName,
+              unread_count: 1,
+              last_message: chat.text,
+              last_updated: new Date(chat.timestampMs).toISOString(),
+              tag: "",
+              avatar_hue: chat.avatarHue,
+              starred: false,
+            }));
+          const updated = prev.map((c) => {
             const chat = latest.find((l) => l.contactId === c.id);
             const isNewForThisContact = newInbound.some((m) => m.contactId === c.id);
             let next = c;
@@ -395,8 +423,9 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
               next = { ...next, unread_count: c.id === activeContactId ? 0 : next.unread_count + 1 };
             }
             return next;
-          }),
-        );
+          });
+          return stubs.length ? [...stubs, ...updated] : updated;
+        });
       } catch (err) {
         console.error("Falha ao consultar mensagens recebidas do WhatsApp:", err);
       }
