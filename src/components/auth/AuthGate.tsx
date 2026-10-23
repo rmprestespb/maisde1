@@ -3,6 +3,7 @@ import type { AuthState } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RegulamentoContent } from "@/components/hub/RegulamentoContent";
 import { ArrowRight, Eye, EyeOff, Lock, User } from "lucide-react";
 
 // Paleta fixa da "porta de entrada" da marca (bordô + dourado). Fica de fora
@@ -216,12 +217,98 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => Promise<s
   );
 }
 
+// Tela de aceite do regulamento: aparece depois do login, uma vez por versão
+// do texto, e bloqueia o painel até a pessoa marcar "Li e concordo".
+function TermsScreen({ auth }: { auth: AuthState }) {
+  const [agreed, setAgreed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const accept = async () => {
+    setError(null);
+    setSaving(true);
+    const err = await auth.acceptTerms();
+    setSaving(false);
+    if (err) setError(`Não foi possível registrar o seu aceite: ${err}`);
+  };
+
+  return (
+    <div
+      className="flex min-h-screen w-full items-center justify-center px-4 py-8"
+      style={{
+        background:
+          "radial-gradient(120% 70% at 85% 0%, rgba(212,175,87,0.14) 0%, rgba(212,175,87,0) 55%)," +
+          "linear-gradient(165deg, #5a1423 0%, #3a0b15 55%, #24060d 100%)",
+      }}
+    >
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-3xl border border-[#D4AF57]/40 bg-black/25 p-6 shadow-[0_25px_70px_rgba(0,0,0,0.5)] sm:p-8">
+        <div className="mb-4 flex items-center gap-4">
+          <LoginMark size="sm" />
+          <div>
+            <h1 className="text-xl font-bold text-white sm:text-2xl">Regulamento de uso</h1>
+            <p className="text-xs text-[#e9d9c8]/80">
+              Leia com atenção: estas regras protegem o seu número de WhatsApp.
+            </p>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-[#D4AF57]/25 bg-black/20 p-4 text-[#f3e8dc]">
+          <RegulamentoContent />
+        </div>
+
+        <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm text-white">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-0.5 size-5 shrink-0 accent-[#D4AF57]"
+          />
+          <span>Li o regulamento, entendi os riscos do uso não oficial do WhatsApp e concordo em seguir as regras.</span>
+        </label>
+
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-red-300">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={auth.logout}
+            className="h-12 rounded-xl text-[#e9d9c8] hover:bg-white/10 hover:text-white sm:w-40"
+          >
+            Sair
+          </Button>
+          <Button
+            type="button"
+            disabled={!agreed || saving}
+            onClick={accept}
+            className="h-12 flex-1 gap-2 rounded-xl border-0 bg-[linear-gradient(180deg,#f1d58a_0%,#d4af57_55%,#b98f35_100%)] text-base font-semibold text-[#3a0c14] shadow-[0_8px_24px_rgba(212,175,87,0.25)] hover:brightness-110 disabled:opacity-50"
+          >
+            {saving ? "Registrando..." : "Concordar e continuar"}
+            {!saving && <ArrowRight className="size-4" />}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AuthGate({ auth, children }: { auth: AuthState; children: ReactNode }) {
   if (!auth.isReady) {
     return <LoadingScreen />;
   }
   if (!auth.isUnlocked) {
     return <LoginScreen onLogin={auth.login} />;
+  }
+  // Logado, mas ainda checando se já aceitou esta versão do regulamento.
+  if (auth.termsAccepted === null) {
+    return <LoadingScreen />;
+  }
+  if (!auth.termsAccepted) {
+    return <TermsScreen auth={auth} />;
   }
   return <>{children}</>;
 }

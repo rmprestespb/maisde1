@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, usernameToEmail } from "@/lib/supabase";
+import { REGULAMENTO_VERSION } from "@/lib/regulamento";
 
 export interface Profile {
   id: string;
@@ -120,6 +121,52 @@ export function useAuth() {
     fetchInstances();
   }, [fetchInstances]);
 
+  // Aceite do regulamento de uso: null = ainda checando, false = precisa
+  // aceitar (tela bloqueia o painel), true = já aceitou esta versão. O aceite
+  // fica gravado em terms_acceptances (005_aceite_regulamento.sql), uma linha
+  // por perfil e por versão — se o texto mudar, a versão muda e todos aceitam
+  // de novo.
+  const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
+  const profileId = profile?.id ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!profileId) {
+      setTermsAccepted(null);
+      return;
+    }
+    supabase
+      .from("terms_acceptances")
+      .select("id")
+      .eq("profile_id", profileId)
+      .eq("version", REGULAMENTO_VERSION)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          // Ex.: tabela ainda não criada (migração 005 não rodada). Não trava
+          // o acesso por causa disso, mas deixa o erro no console.
+          console.error("Não deu pra checar o aceite do regulamento:", error.message);
+          setTermsAccepted(true);
+          return;
+        }
+        setTermsAccepted(!!data);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
+
+  async function acceptTerms(): Promise<string | null> {
+    if (!profileId) return "Não autenticado.";
+    const { error } = await supabase
+      .from("terms_acceptances")
+      .insert({ profile_id: profileId, version: REGULAMENTO_VERSION });
+    // 23505 = já existia o aceite desta versão (unique) — conta como aceito.
+    if (error && error.code !== "23505") return error.message;
+    setTermsAccepted(true);
+    return null;
+  }
+
   async function login(username: string, password: string): Promise<string | null> {
     const { error } = await supabase.auth.signInWithPassword({
       email: usernameToEmail(username),
@@ -160,6 +207,8 @@ export function useAuth() {
     // funcionário (nesse caso quem adiciona número é o dono da empresa).
     canManageInstances: !!profile && !profile.company_id,
     ownerProfileId: ownerId,
+    termsAccepted,
+    acceptTerms,
     login,
     logout,
     changePassword,

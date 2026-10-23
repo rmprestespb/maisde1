@@ -21,7 +21,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Bell, Keyboard, ArrowUpDown, KeyRound } from "lucide-react";
+import { RegulamentoContent } from "@/components/hub/RegulamentoContent";
+import { Bell, Keyboard, ArrowUpDown, KeyRound, ScrollText } from "lucide-react";
 
 function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { changePassword } = useAuth();
@@ -128,6 +129,7 @@ function Row({ icon: Icon, title, description, children }: RowProps) {
 export function SettingsPanel() {
   const { prefs, update } = usePreferences();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [regulamentoOpen, setRegulamentoOpen] = useState(false);
 
   return (
     <div className="mx-auto h-full max-w-xl overflow-y-auto px-4 py-6 sm:px-6">
@@ -193,9 +195,29 @@ export function SettingsPanel() {
             Trocar senha
           </Button>
         </Row>
+
+        <Row
+          icon={ScrollText}
+          title="Regulamento de uso"
+          description="Regras para usar o WhatsApp com segurança e reduzir o risco de bloqueio do número."
+        >
+          <Button variant="outline" size="sm" onClick={() => setRegulamentoOpen(true)}>
+            Ler
+          </Button>
+        </Row>
       </div>
 
       <ChangePasswordDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} />
+
+      <Dialog open={regulamentoOpen} onOpenChange={setRegulamentoOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Regulamento de uso</DialogTitle>
+            <DialogDescription>Você já concordou com estas regras ao entrar no sistema.</DialogDescription>
+          </DialogHeader>
+          <RegulamentoContent />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
