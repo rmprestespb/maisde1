@@ -82,7 +82,9 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
 
   useEffect(() => stopPolling, []);
 
-  function startPolling(name: string) {
+  // saveRow=false quando é só reconectar um número que já está salvo na conta:
+  // aí não insere de novo em client_instances, só avisa que conectou.
+  function startPolling(name: string, saveRow = true) {
     stopPolling();
     let tries = 0;
     pollTimer.current = window.setInterval(async () => {
@@ -91,6 +93,11 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
         const inst = await getWhatsAppInstance({ data: { instanceName: name } });
         if (inst?.status === "connected") {
           stopPolling();
+          if (!saveRow) {
+            setStep("connected");
+            onChanged();
+            return;
+          }
           if (!ownerProfileId) {
             setErrorMsg("Não foi possível identificar sua conta pra salvar o número. Tenta de novo.");
             setStep("error");
@@ -158,6 +165,37 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
     }
   }
 
+  // Reconecta um número que já existe (ex.: caiu e ficou "Desconectado"):
+  // pede um QR novo pra mesma instância, sem criar outra.
+  async function handleReconnect(inst: ClientInstanceRow) {
+    setLabel(inst.label);
+    setInstanceName(inst.instance_name);
+    setStep("connecting");
+    setErrorMsg(null);
+    try {
+      const r = await reconnectInstanceQr({ data: { instanceName: inst.instance_name } });
+      if (r.status === "qr") {
+        setQrCodeBase64(r.qrCodeBase64);
+        setPairingCode(r.pairingCode);
+        setStep("qr");
+        startPolling(inst.instance_name, false);
+        return;
+      }
+      if (r.status === "already-connected") {
+        setStep("connected");
+        onChanged();
+        return;
+      }
+      setErrorMsg("A Evolution API não devolveu um QR Code dessa vez. Tenta de novo.");
+      setStep("error");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Falha ao gerar o QR Code.");
+      setStep("error");
+    }
+  }
+
+  const isReconnect = !!instanceName && existing.some((e) => e.instance_name === instanceName);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -183,6 +221,16 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
                   >
                     <Phone className="size-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium text-foreground">{inst.label}</span>
+                    {canManage && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto gap-1.5"
+                        onClick={() => handleReconnect(inst)}
+                      >
+                        <QrCode className="size-3.5" /> Reconectar
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -238,7 +286,7 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
         {step === "connecting" && (
           <div className="flex flex-col items-center gap-3 py-8 text-center">
             <Loader2 className="size-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Criando o número na Evolution API...</p>
+            <p className="text-sm text-muted-foreground">Preparando o QR Code na Evolution API...</p>
           </div>
         )}
 
@@ -281,7 +329,7 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
               <Button variant="ghost" onClick={() => setStep("list")}>
                 Voltar
               </Button>
-              <Button onClick={() => setStep("form")}>Tentar de novo</Button>
+              <Button onClick={() => setStep(isReconnect ? "list" : "form")}>Tentar de novo</Button>
             </div>
           </div>
         )}
