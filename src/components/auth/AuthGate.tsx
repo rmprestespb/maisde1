@@ -21,19 +21,24 @@ const inputGold =
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen w-full bg-[#1c0308]">
+      {/* A arte ocupa a altura toda da tela e a largura segue a proporção dela
+          (sem faixa vazia); todo o resto da largura fica para o painel bordô.
+          Em telas mais "quadradas" a arte encolhe para sobrar 28rem ao painel. */}
       <div
         aria-hidden
-        className="hidden flex-1 lg:block"
+        className="hidden h-screen min-w-0 shrink lg:block"
         style={{
+          aspectRatio: "1113 / 941",
+          maxWidth: "calc(100vw - 28rem)",
           backgroundImage: "url(/brand/auth-bg-v2.jpg)",
           backgroundSize: "contain",
-          backgroundPosition: "right center",
+          backgroundPosition: "left center",
           backgroundRepeat: "no-repeat",
           backgroundColor: "#220509",
         }}
       />
       <div
-        className="relative flex w-full items-center justify-center overflow-hidden px-6 py-10 lg:w-[30rem] lg:shrink-0 lg:border-l lg:border-[#D4AF57]/40 xl:w-[34rem]"
+        className="relative flex w-full flex-1 items-center justify-center overflow-hidden px-6 py-10 lg:min-w-[28rem] lg:border-l lg:border-[#D4AF57]/40"
         style={{
           background:
             "radial-gradient(120% 70% at 85% 0%, rgba(212,175,87,0.14) 0%, rgba(212,175,87,0) 55%)," +
@@ -45,7 +50,7 @@ function Shell({ children }: { children: ReactNode }) {
           aria-hidden
           className="pointer-events-none absolute inset-4 rounded-[2rem] border border-[#D4AF57]/25"
         />
-        <div className="relative z-10 w-full max-w-sm">{children}</div>
+        <div className="relative z-10 w-full max-w-sm xl:max-w-md">{children}</div>
       </div>
     </div>
   );
