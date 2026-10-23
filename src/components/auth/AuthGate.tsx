@@ -5,49 +5,91 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowRight, Eye, EyeOff, Lock, User } from "lucide-react";
 
-const inputDark =
-  "border-white/15 bg-white/[0.06] text-white placeholder:text-slate-400 focus-visible:ring-1 focus-visible:ring-emerald-400/70";
+// Paleta fixa da "porta de entrada" da marca (bordô + dourado). Fica de fora
+// do tema claro/escuro do painel: o login sempre tem a mesma cara.
+const GOLD = "#D4AF57";
+
+const inputGold =
+  "h-12 rounded-xl border border-[#D4AF57]/35 bg-black/25 pl-10 text-white placeholder:text-[#e9d9c8]/60 " +
+  "focus-visible:border-[#D4AF57] focus-visible:ring-1 focus-visible:ring-[#D4AF57]/70";
 
 /**
- * Arte de marca (rede + os três celulares) como fundo em tela cheia, com um
- * cartão em "vidro" (fundo escuro translúcido + blur) sobreposto — cores
- * combinando com o degradê azul/verde da imagem em vez de um cartão branco
- * destacado. Estilo fixo, independente do tema claro/escuro do resto do
- * painel — é a "porta de entrada" da marca, não uma tela do produto.
+ * Tela dividida: à esquerda a arte da marca (só aparece em telas grandes),
+ * à direita o painel bordô com o formulário. No celular só o painel aparece,
+ * ocupando a tela toda.
  */
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <div
-      className="relative flex min-h-screen items-center justify-center bg-[#050b1a] bg-cover bg-center px-4 py-10 lg:justify-end lg:pr-44 lg:pl-10"
-      style={{ backgroundImage: "url(/brand/auth-bg.jpg)" }}
-    >
-      <div className="absolute inset-0 bg-gradient-to-r from-black/25 via-black/10 to-black/55" />
-      <div className="relative w-full max-w-sm rounded-2xl border border-white/15 bg-slate-950/55 p-7 shadow-[0_25px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-        {children}
+    <div className="flex min-h-screen w-full bg-[#1c0308]">
+      <div
+        aria-hidden
+        className="hidden flex-1 lg:block"
+        style={{
+          backgroundImage: "url(/brand/auth-bg-v2.jpg)",
+          backgroundSize: "contain",
+          backgroundPosition: "right center",
+          backgroundRepeat: "no-repeat",
+          backgroundColor: "#220509",
+        }}
+      />
+      <div
+        className="relative flex w-full items-center justify-center overflow-hidden px-6 py-10 lg:w-[30rem] lg:shrink-0 lg:border-l lg:border-[#D4AF57]/40 xl:w-[34rem]"
+        style={{
+          background:
+            "radial-gradient(120% 70% at 85% 0%, rgba(212,175,87,0.14) 0%, rgba(212,175,87,0) 55%)," +
+            "linear-gradient(165deg, #5a1423 0%, #3a0b15 55%, #24060d 100%)",
+        }}
+      >
+        {/* moldura fina dourada, como no desenho da marca */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-4 rounded-[2rem] border border-[#D4AF57]/25"
+        />
+        <div className="relative z-10 w-full max-w-sm">{children}</div>
       </div>
     </div>
   );
 }
 
-function CardHeader({ title, subtitle }: { title: string; subtitle: string }) {
+// Monograma provisório "CG" (o logo oficial em PNG entra depois, como no menu).
+function LoginMark({ size = "lg" }: { size?: "lg" | "sm" }) {
   return (
-    <div className="mb-6 flex flex-col items-center text-center">
-      <img src="/brand/logo-mark.png" alt="Connect Hub Pro" className="w-20 drop-shadow-[0_8px_20px_rgba(0,0,0,0.5)]" />
-      <h1 className="mt-3 text-2xl font-bold text-white">{title}</h1>
-      <p className="mt-1 text-sm text-slate-300">{subtitle}</p>
+    <span
+      aria-hidden
+      className={
+        "grid shrink-0 place-items-center rounded-2xl border border-[#D4AF57]/70 font-serif font-bold " +
+        "bg-gradient-to-br from-[#7a1c2e] to-[#3a0b15] text-[#D4AF57] shadow-[0_0_24px_rgba(212,175,87,0.25)] " +
+        (size === "lg" ? "size-16 text-2xl" : "size-12 text-xl")
+      }
+    >
+      CG
+    </span>
+  );
+}
+
+function CardHeader() {
+  return (
+    <div className="mb-8 flex flex-col items-center gap-4 text-center">
+      <LoginMark />
+      <div>
+        <h1 className="text-3xl font-bold text-white">
+          Connect Hub <span style={{ color: GOLD }}>Pro</span>
+        </h1>
+        <p className="mt-1 text-xs font-medium tracking-[0.25em] text-[#e9d9c8]/80">ENTRE NO SEU SISTEMA</p>
+      </div>
     </div>
   );
 }
 
 function SecureFooter() {
   return (
-    <div className="mt-6 flex items-center gap-3 text-xs text-slate-400">
-      <div className="h-px flex-1 bg-white/15" />
+    <div className="mt-7 flex items-center gap-3 text-xs text-[#e9d9c8]/60">
+      <div className="h-px flex-1 bg-[#D4AF57]/25" />
       <span className="flex items-center gap-1.5 whitespace-nowrap">
         <Lock className="size-3.5" />
         Acesso protegido
       </span>
-      <div className="h-px flex-1 bg-white/15" />
+      <div className="h-px flex-1 bg-[#D4AF57]/25" />
     </div>
   );
 }
@@ -68,24 +110,25 @@ function PasswordField({
   const [show, setShow] = useState(false);
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id} className="text-slate-200">
+      <Label htmlFor={id} className="sr-only">
         {label}
       </Label>
       <div className="relative">
-        <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#D4AF57]" />
         <Input
           id={id}
           type={show ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           autoComplete={autoComplete}
-          className={`pl-9 pr-9 ${inputDark}`}
+          placeholder={label}
+          className={`pr-10 ${inputGold}`}
         />
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
           aria-label={show ? "Ocultar senha" : "Mostrar senha"}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#e9d9c8]/70 hover:text-white"
         >
           {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
         </button>
@@ -98,8 +141,10 @@ function LoadingScreen() {
   return (
     <Shell>
       <div className="flex flex-col items-center py-6 text-center">
-        <img src="/brand/logo-mark.png" alt="Connect Hub Pro" className="w-16 animate-pulse" />
-        <p className="mt-4 text-sm text-slate-300">Verificando sua sessão...</p>
+        <div className="animate-pulse">
+          <LoginMark />
+        </div>
+        <p className="mt-4 text-sm text-[#e9d9c8]/80">Verificando sua sessão...</p>
       </div>
     </Shell>
   );
@@ -124,35 +169,41 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => Promise<s
 
   return (
     <Shell>
-      <CardHeader title="Bem-vindo!" subtitle="Entre para acessar sua central de atendimento" />
-      <form onSubmit={submit} className="flex flex-col gap-3">
+      <CardHeader />
+      <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="login-user" className="text-slate-200">
+          <Label htmlFor="login-user" className="sr-only">
             Usuário
           </Label>
           <div className="relative">
-            <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <User className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#D4AF57]" />
             <Input
               id="login-user"
               autoFocus
+              autoComplete="username"
+              placeholder="Usuário"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className={`pl-9 ${inputDark}`}
+              className={inputGold}
             />
           </div>
         </div>
         <PasswordField id="login-pass" label="Senha" value={password} onChange={setPassword} autoComplete="current-password" />
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-300">
+            {error}
+          </p>
+        )}
         <Button
           type="submit"
           disabled={loading}
-          className="mt-1 h-11 gap-2 bg-gradient-to-r from-blue-600 to-emerald-500 text-white hover:from-blue-500 hover:to-emerald-400"
+          className="mt-1 h-12 gap-2 rounded-xl border-0 bg-[linear-gradient(180deg,#f1d58a_0%,#d4af57_55%,#b98f35_100%)] text-base font-semibold text-[#3a0c14] shadow-[0_8px_24px_rgba(212,175,87,0.25)] hover:brightness-110 disabled:opacity-70"
         >
           {loading ? "Entrando..." : "Entrar"}
           {!loading && <ArrowRight className="size-4" />}
         </Button>
-        <p className="text-center text-xs text-slate-400">
-          Não tem acesso? Fale com quem te vendeu o Connect Hub Pro.
+        <p className="text-center text-xs text-[#e9d9c8]/70">
+          Ainda não tem acesso? Fale com quem te vendeu o Connect Hub Pro.
         </p>
       </form>
       <SecureFooter />
