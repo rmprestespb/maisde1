@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import type { AuthState } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -169,6 +169,142 @@ function LoadingScreen() {
   );
 }
 
+// Telas largas (computador): a entrada é a imagem aprovada, exatamente como
+// foi desenhada. Por cima dela ficam os campos de verdade (usuário, senha e o
+// botão Entrar), invisíveis, nas mesmas posições dos campos da imagem — tudo
+// que a pessoa vê é a imagem, e o login funciona normalmente.
+// Posições em % da imagem original (1024 x 506).
+const IMG_W = 1024;
+const IMG_H = 506;
+const pctX = (x: number) => `${(x / IMG_W) * 100}%`;
+const pctY = (y: number) => `${(y / IMG_H) * 100}%`;
+
+function useWideScreen() {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setWide(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return wide;
+}
+
+function ImageLoginScreen({
+  username,
+  password,
+  setUsername,
+  setPassword,
+  error,
+  notice,
+  loading,
+  submit,
+}: {
+  username: string;
+  password: string;
+  setUsername: (v: string) => void;
+  setPassword: (v: string) => void;
+  error: string | null;
+  notice?: string | null;
+  loading: boolean;
+  submit: (e: FormEvent) => void;
+}) {
+  const field = (top: number, bottom: number): CSSProperties => ({
+    position: "absolute",
+    left: pctX(710),
+    width: pctX(216),
+    top: pctY(top),
+    height: pctY(bottom - top + 1),
+    background: "transparent",
+    border: "none",
+    outline: "none",
+    color: "#2a2a24",
+    fontSize: "1.15cqw",
+    paddingLeft: "2.4cqw",
+    paddingRight: "1cqw",
+  });
+  const msg = error ?? notice ?? (loading ? "Entrando..." : null);
+  return (
+    <div className="flex min-h-screen w-full items-center justify-center bg-[#030200]">
+      <style>{`
+        .img-login input::placeholder { color: #8d8a78; }
+        .img-login input:-webkit-autofill { -webkit-text-fill-color: #2a2a24; transition: background-color 9999s ease-out 0s; }
+        .img-login .img-login-user:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #fffffd inset; }
+        .img-login .img-login-pass:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #f8f5c2 inset; }
+      `}</style>
+      <div
+        className="img-login relative"
+        style={{
+          width: `min(100vw, calc(100vh * ${IMG_W} / ${IMG_H}))`,
+          aspectRatio: `${IMG_W} / ${IMG_H}`,
+          containerType: "inline-size",
+        }}
+      >
+        <img
+          src="/brand/login-tela.jpg"
+          alt="Connect Hub Pro — entre no seu sistema"
+          draggable={false}
+          className="absolute inset-0 size-full select-none"
+        />
+        <form onSubmit={submit} className="absolute inset-0" noValidate>
+          <input
+            id="login-user"
+            className="img-login-user"
+            autoFocus
+            autoComplete="username"
+            aria-label="Usuário"
+            placeholder="Usuário"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            style={field(233, 254)}
+          />
+          <input
+            id="login-pass"
+            className="img-login-pass"
+            type="password"
+            autoComplete="current-password"
+            aria-label="Senha"
+            placeholder="Senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={field(264, 286)}
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            aria-label="Entrar"
+            className="absolute rounded-[0.9cqw] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-progress"
+            style={{
+              left: pctX(710),
+              width: pctX(217),
+              top: pctY(297),
+              height: pctY(23),
+              background: "transparent",
+              cursor: loading ? "progress" : "pointer",
+            }}
+          />
+          {msg && (
+            <p
+              role="alert"
+              className="absolute text-center"
+              style={{
+                left: pctX(690),
+                width: pctX(256),
+                top: pctY(368),
+                fontSize: "0.95cqw",
+                color: error ? "#ff9d8f" : "#f1d58a",
+              }}
+            >
+              {msg}
+            </p>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function LoginScreen({
   onLogin,
   notice,
@@ -191,6 +327,22 @@ function LoginScreen({
       setError(err.toLowerCase().includes("invalid") ? "Usuário ou senha incorretos." : err);
     }
   };
+
+  const wide = useWideScreen();
+  if (wide) {
+    return (
+      <ImageLoginScreen
+        username={username}
+        password={password}
+        setUsername={setUsername}
+        setPassword={setPassword}
+        error={error}
+        notice={notice}
+        loading={loading}
+        submit={submit}
+      />
+    );
+  }
 
   return (
     <Shell>
