@@ -685,6 +685,25 @@ export const getWhatsAppMedia = createServerFn({ method: "POST" })
     };
   });
 
+// Melhor status de entrega de uma mensagem: a Evolution guarda os acks em
+// "MessageUpdate" (array); "status" direto no item é o formato antigo.
+function bestAckStatus(rec: Record<string, unknown>): MessageAckStatus | null {
+  const updates = Array.isArray(rec["MessageUpdate"]) ? (rec["MessageUpdate"] as Record<string, unknown>[]) : [];
+  const direct = rec["status"];
+  let best: MessageAckStatus | null = null;
+  let sawError = false;
+  for (const raw of [...updates.map((u) => u["status"]), ...(typeof direct === "string" ? [direct] : [])]) {
+    if (typeof raw !== "string") continue;
+    if (raw === "ERROR") {
+      sawError = true;
+      continue;
+    }
+    const mapped = mapAckStatus(raw);
+    if (mapped && (!best || ACK_RANK[mapped] > ACK_RANK[best])) best = mapped;
+  }
+  return best ?? (sawError ? "failed" : null);
+}
+
 export type HistoryItem = {
   waId: string;
   fromMe: boolean;
@@ -770,7 +789,7 @@ export const getConversationHistory = createServerFn({ method: "POST" })
         mediaType,
         fileName: doc && typeof doc["fileName"] === "string" ? (doc["fileName"] as string) : null,
         timestampMs: tsSec * 1000,
-        status: mapAckStatus(typeof rec["status"] === "string" ? (rec["status"] as string) : undefined),
+        status: bestAckStatus(rec),
       });
     }
     return [...byId.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-100);
