@@ -60,11 +60,11 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-// Selo de parceria, abaixo do formulário (texto real, não imagem).
+// Selo de parceira, abaixo do formulário (texto real, não imagem).
 function PartnerBadge() {
   return (
     <p className="mt-14 text-center text-2xl font-bold tracking-tight text-white">
-      <span className="font-medium text-[#f1d58a]">Parceria</span> Rede<span style={{ color: GOLD }}>BPO</span>
+      <span className="font-medium text-[#f1d58a]">Parceira</span> Rede<span style={{ color: GOLD }}>BPO</span>
       <span style={{ color: GOLD }}>.</span>
     </p>
   );
