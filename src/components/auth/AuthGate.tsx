@@ -11,8 +11,13 @@ import { ArrowRight, Eye, EyeOff, Lock, User } from "lucide-react";
 const GOLD = "#D4AF57";
 
 const inputGold =
-  "h-12 rounded-xl border border-[#D4AF57]/35 bg-black/25 pl-10 text-white placeholder:text-[#e9d9c8]/60 " +
-  "focus-visible:border-[#D4AF57] focus-visible:ring-1 focus-visible:ring-[#D4AF57]/70";
+  "h-12 rounded-xl border border-[#f1d58a] bg-[#fffdf5] pl-10 text-[15px] text-[#2a2a24] placeholder:text-[#8d8a78] " +
+  "shadow-[0_0_16px_rgba(212,175,87,0.35)] focus-visible:border-[#D4AF57] focus-visible:ring-2 focus-visible:ring-[#D4AF57]/70";
+
+// A entrada pode ser a imagem inteira (true) ou arte + painel com texto de
+// verdade (false). O painel com texto de verdade fica nítido em qualquer
+// tamanho de tela; a imagem inteira embaça ao ampliar.
+const USE_IMAGE_LOGIN = true;
 
 /**
  * Tela dividida: à esquerda a arte da marca (só aparece em telas grandes),
@@ -42,14 +47,15 @@ function Shell({ children }: { children: ReactNode }) {
         className="relative flex w-full flex-1 items-center justify-center overflow-hidden px-6 py-10 lg:min-w-[28rem] lg:border-l lg:border-[#D4AF57]/40"
         style={{
           background:
-            "radial-gradient(120% 70% at 85% 0%, rgba(212,175,87,0.14) 0%, rgba(212,175,87,0) 55%)," +
-            "linear-gradient(165deg, #17140f 0%, #0b0a08 55%, #040404 100%)",
+            "radial-gradient(90% 55% at 100% 0%, rgba(212,175,87,0.20) 0%, rgba(212,175,87,0) 60%)," +
+            "radial-gradient(80% 45% at 0% 100%, rgba(212,175,87,0.12) 0%, rgba(212,175,87,0) 60%)," +
+            "linear-gradient(165deg, #121009 0%, #080706 55%, #030303 100%)",
         }}
       >
         {/* moldura fina dourada, como no desenho da marca */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-4 rounded-[2rem] border border-[#D4AF57]/25"
+          className="pointer-events-none absolute inset-4 rounded-[2rem] border border-[#D4AF57]/55 shadow-[0_0_28px_rgba(212,175,87,0.18),inset_0_0_28px_rgba(212,175,87,0.08)]"
         />
         <div className="relative z-10 w-full max-w-sm xl:max-w-md">
           {children}
@@ -60,13 +66,24 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-// Selo de parceira, abaixo do formulário (texto real, não imagem).
+// Logo "Parceira RedeBPO": a imagem original, sem nenhuma alteração, no
+// tamanho exato do arquivo (153 x 62) pra não embaçar. O fundo preto da
+// imagem se mistura ao painel escuro (mix-blend lighten) sem editar o arquivo.
 function PartnerBadge() {
   return (
-    <p className="mt-14 text-center text-2xl font-bold tracking-tight text-white">
-      <span className="font-medium text-[#f1d58a]">Parceira</span> Rede<span style={{ color: GOLD }}>BPO</span>
-      <span style={{ color: GOLD }}>.</span>
-    </p>
+    <img
+      src="/brand/parceira-redebpo.png"
+      alt="Parceira RedeBPO"
+      width={153}
+      height={62}
+      draggable={false}
+      className="mx-auto mt-12 block select-none mix-blend-lighten"
+      style={{
+        // Só as bordas da imagem somem suavemente no painel; o arquivo não é alterado.
+        WebkitMaskImage: "radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%)",
+        maskImage: "radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%)",
+      }}
+    />
   );
 }
 
@@ -147,7 +164,7 @@ function PasswordField({
           type="button"
           onClick={() => setShow((s) => !s)}
           aria-label={show ? "Ocultar senha" : "Mostrar senha"}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#e9d9c8]/70 hover:text-white"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7a7766] hover:text-black"
         >
           {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
         </button>
@@ -329,7 +346,7 @@ function LoginScreen({
   };
 
   const wide = useWideScreen();
-  if (wide) {
+  if (USE_IMAGE_LOGIN && wide) {
     return (
       <ImageLoginScreen
         username={username}
