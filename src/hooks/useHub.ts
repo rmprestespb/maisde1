@@ -336,8 +336,11 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
   const hasChatsBaseline = useRef(false);
   useEffect(() => {
     let cancelled = false;
+    // Nao empilha consultas: se a anterior ainda nao terminou, espera a proxima rodada.
+    let running = false;
     async function refreshInbound() {
-      if (clientInstances.length === 0) return;
+      if (clientInstances.length === 0 || running) return;
+      running = true;
       try {
         const perInstance = await Promise.all(
           clientInstances.map((ci) =>
@@ -428,6 +431,8 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
         });
       } catch (err) {
         console.error("Falha ao consultar mensagens recebidas do WhatsApp:", err);
+      } finally {
+        running = false;
       }
     }
     refreshInbound();

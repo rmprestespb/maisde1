@@ -554,43 +554,60 @@ export const getLatestChats = createServerFn({ method: "GET" })
     const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
 
-    const res = await fetch(`${baseUrl}/chat/findChats/${instanceName}`, {
+    // CORRECAO — antes usava /chat/findChats, que com milhares de contatos
+    // nao responde nem em 150s (e a tela repetia a cada 6s, empilhando
+    // pedidos e travando o PC). Agora le so as mensagens mais recentes via
+    // /chat/findMessages (resposta rapida) e monta a ultima de cada conversa.
+    const res = await fetch(`${baseUrl}/chat/findMessages/${instanceName}`, {
       method: "POST",
       headers,
-      body: JSON.stringify({}),
+      body: JSON.stringify({ where: {}, page: 1, offset: 150 }),
+      signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) {
-      throw new Error(`Evolution API respondeu ${res.status} em /chat/findChats`);
+      throw new Error(`Evolution API respondeu ${res.status} em /chat/findMessages`);
     }
-    const json = (await res.json()) as unknown;
-    const list: Record<string, unknown>[] = Array.isArray(json)
+    const json = (await res.json()) as Record<string, unknown> | unknown[] | null;
+    const asObj = (json ?? {}) as Record<string, unknown>;
+    const messagesObj = asObj["messages"] as Record<string, unknown> | undefined;
+    const records: Record<string, unknown>[] = Array.isArray(json)
       ? (json as Record<string, unknown>[])
-      : Array.isArray((json as Record<string, unknown> | null)?.["chats"])
-        ? ((json as Record<string, unknown>)["chats"] as Record<string, unknown>[])
-        : [];
+      : Array.isArray(messagesObj?.["records"])
+        ? (messagesObj!["records"] as Record<string, unknown>[])
+        : Array.isArray(asObj["records"])
+          ? (asObj["records"] as Record<string, unknown>[])
+          : [];
 
-    const out: ChatPreview[] = [];
-    for (const chat of list) {
-      const remoteJid = chat["remoteJid"];
-      // Só conversa individual (mesmo filtro de getWhatsAppContacts) — grupo
-      // (@g.us) e broadcast/status ficam de fora.
-      if (typeof remoteJid !== "string" || !remoteJid.endsWith("@s.whatsapp.net")) continue;
-      const last = chat["lastMessage"] as Record<string, unknown> | undefined;
-      if (!last) continue;
-      const key = (last["key"] as Record<string, unknown> | undefined) ?? {};
-      const message = (last["message"] as Record<string, unknown> | undefined) ?? {};
+    const best = new Map<string, ChatPreview>();
+    for (const rec of records) {
+      const key = (rec["key"] as Record<string, unknown> | undefined) ?? {};
       const messageId = key["id"];
       if (typeof messageId !== "string") continue;
 
-      // Texto puro continua como antes. Mídia (imagem/vídeo/áudio/documento)
-      // agora também aparece — como ainda não existe exibição real da mídia
-      // em si na tela (só a etiqueta), o "text" vira um resumo com
-      // emoji+legenda (se tiver), igual ao que o próprio WhatsApp mostra na
-      // lista de conversas quando não abre a mídia.
+      // Contatos novos do WhatsApp chegam como "...@lid" (identificador
+      // interno, nao e telefone). O telefone real vem em remoteJidAlt — usa
+      // ele, assim bate com a lista de contatos e a resposta vai pro numero certo.
+      let jid = key["remoteJid"];
+      const alt = key["remoteJidAlt"];
+      if (
+        typeof jid === "string" &&
+        jid.endsWith("@lid") &&
+        typeof alt === "string" &&
+        alt.endsWith("@s.whatsapp.net")
+      ) {
+        jid = alt;
+      }
+      // Só conversa individual — grupo (@g.us), broadcast e @lid sem telefone ficam de fora.
+      if (typeof jid !== "string" || !jid.endsWith("@s.whatsapp.net")) continue;
+
+      const message = (rec["message"] as Record<string, unknown> | undefined) ?? {};
       const { mediaType, caption } = detectMedia(message);
       let text: string | undefined;
+      const extended = message["extendedTextMessage"] as Record<string, unknown> | undefined;
       if (typeof message["conversation"] === "string") {
         text = message["conversation"];
+      } else if (extended && typeof extended["text"] === "string") {
+        text = extended["text"] as string;
       } else if (mediaType) {
         const label = { image: "📷 Foto", video: "🎬 Vídeo", audio: "🎵 Áudio", document: "📄 Documento" }[
           mediaType
@@ -599,23 +616,30 @@ export const getLatestChats = createServerFn({ method: "GET" })
       }
       if (typeof text !== "string") continue;
 
-      const tsRaw = last["messageTimestamp"];
-      // messageTimestamp vem em segundos (confirmado com dado real).
-      const timestampMs = typeof tsRaw === "number" ? tsRaw * 1000 : Date.now();
-      out.push({
-        contactId: remoteJid,
+      // messageTimestamp vem em segundos (numero ou texto, conforme a versao).
+      const tsRaw = rec["messageTimestamp"];
+      let tsSec = Number(
+        typeof tsRaw === "object" && tsRaw !== null ? (tsRaw as Record<string, unknown>)["low"] : tsRaw,
+      );
+      if (!Number.isFinite(tsSec) || tsSec <= 0) tsSec = Date.now() / 1000;
+      const timestampMs = tsSec * 1000;
+
+      const prev = best.get(jid);
+      if (prev && prev.timestampMs >= timestampMs) continue;
+      best.set(jid, {
+        contactId: jid,
         messageId,
         text,
-        pushName: typeof last["pushName"] === "string" ? (last["pushName"] as string) : null,
+        pushName: typeof rec["pushName"] === "string" ? (rec["pushName"] as string) : null,
         fromMe: key["fromMe"] === true,
         timestampMs,
         mediaType,
         instanceName,
-        phone: formatPhone(remoteJid),
-        avatarHue: hashHue(remoteJid),
+        phone: formatPhone(jid),
+        avatarHue: hashHue(jid),
       });
     }
-    return out;
+    return [...best.values()];
   },
 );
 
