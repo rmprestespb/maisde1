@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contacts as seedContacts, messages as seedMessages } from "@/data/mock";
 import {
   getLatestChats,
+  getConversationHistory,
   getMessageStatus,
   getWhatsAppContacts,
   getWhatsAppInstance,
@@ -203,6 +204,48 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
       window.clearInterval(timer);
     };
   }, [instanceNamesKey]);
+
+  // Histórico da conversa aberta: busca na Evolution (que guarda tudo) uma vez
+  // por conversa a cada vez que a página é aberta, e troca as mensagens locais
+  // dessa conversa pelas reais — assim atualizar a página não esvazia o chat.
+  const historyLoaded = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!activeContactId) return;
+    const contact = contacts.find((c) => c.id === activeContactId);
+    if (!contact || !clientInstances.some((ci) => ci.instance_name === contact.instance_id)) return;
+    const key = `${contact.instance_id}|${contact.id}`;
+    if (historyLoaded.current.has(key)) return;
+    historyLoaded.current.add(key);
+    getConversationHistory({ data: { remoteJid: contact.id, instanceName: contact.instance_id } })
+      .then((items) => {
+        const loaded: Message[] = items.map((it) => ({
+          id: it.fromMe ? `wa-out-${it.waId}` : `wa-in-${it.waId}`,
+          contact_id: contact.id,
+          sender_type: it.fromMe ? "outbound" : "inbound",
+          content_type: it.mediaType ?? "text",
+          ...(it.text ? { text: it.text } : {}),
+          ...(it.mediaType ? { wa_message_id: it.waId, wa_instance: contact.instance_id } : {}),
+          ...(it.fileName ? { file_name: it.fileName } : {}),
+          timestamp: new Date(it.timestampMs).toISOString(),
+          status: it.fromMe ? (it.status ?? "sent") : "delivered",
+        }));
+        setMessages((prev) => {
+          // Mensagem enviada AGORA, depois de abrir a conversa e antes do
+          // histórico chegar, ainda não está nele — mantém essas.
+          const loadedIds = new Set(loaded.map((m) => m.id));
+          const newest = loaded.length ? +new Date(loaded[loaded.length - 1]!.timestamp) : 0;
+          const keepLocal = prev.filter(
+            (m) => m.contact_id === contact.id && !loadedIds.has(m.id) && +new Date(m.timestamp) > newest,
+          );
+          const others = prev.filter((m) => m.contact_id !== contact.id);
+          return [...others, ...loaded, ...keepLocal];
+        });
+      })
+      .catch((err) => {
+        historyLoaded.current.delete(key);
+        console.error("Falha ao carregar o historico da conversa:", err);
+      });
+  }, [activeContactId, contacts, instanceNamesKey]);
 
   const openContact = useCallback((id: string) => {
     setActiveContactId(id);

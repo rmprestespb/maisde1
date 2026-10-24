@@ -685,6 +685,97 @@ export const getWhatsAppMedia = createServerFn({ method: "POST" })
     };
   });
 
+export type HistoryItem = {
+  waId: string;
+  fromMe: boolean;
+  text: string | null;
+  mediaType: "image" | "video" | "audio" | "document" | null;
+  fileName: string | null;
+  timestampMs: number;
+  status: MessageAckStatus | null;
+};
+
+type HistoryInput = { remoteJid: string } & WithInstance;
+
+function recordsOf(json: unknown): Record<string, unknown>[] {
+  const root = (json ?? {}) as Record<string, unknown>;
+  const messagesObj = (root["messages"] as Record<string, unknown> | undefined) ?? {};
+  if (Array.isArray(json)) return json as Record<string, unknown>[];
+  if (Array.isArray(messagesObj["records"])) return messagesObj["records"] as Record<string, unknown>[];
+  if (Array.isArray(root["records"])) return root["records"] as Record<string, unknown>[];
+  return [];
+}
+
+/**
+ * Histórico de uma conversa (as últimas mensagens), lido da Evolution — que
+ * guarda tudo. Sem isso a tela só mostrava mensagens da sessão aberta e a
+ * conversa "esvaziava" ao atualizar a página. Junta as mensagens do telefone
+ * (…@s.whatsapp.net) com as que chegaram pelo identificador interno (@lid)
+ * desse mesmo telefone (remoteJidAlt).
+ */
+export const getConversationHistory = createServerFn({ method: "POST" })
+  .validator((data: HistoryInput) => data)
+  .handler(async ({ data }): Promise<HistoryItem[]> => {
+    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const headers = { apikey: apiKey, "Content-Type": "application/json" };
+    const phoneJid = data.remoteJid;
+
+    async function query(body: unknown): Promise<Record<string, unknown>[]> {
+      const res = await fetch(`${baseUrl}/chat/findMessages/${instanceName}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(25000),
+      });
+      if (!res.ok) throw new Error(`Evolution API respondeu ${res.status} em /chat/findMessages`);
+      return recordsOf(await res.json());
+    }
+
+    const [direct, recent] = await Promise.all([
+      query({ where: { key: { remoteJid: phoneJid } }, page: 1, offset: 100 }),
+      query({ where: {}, page: 1, offset: 300 }).catch(() => [] as Record<string, unknown>[]),
+    ]);
+    const viaLid = recent.filter((rec) => {
+      const key = (rec["key"] as Record<string, unknown> | undefined) ?? {};
+      return key["remoteJidAlt"] === phoneJid;
+    });
+
+    const byId = new Map<string, HistoryItem>();
+    for (const rec of [...direct, ...viaLid]) {
+      const key = (rec["key"] as Record<string, unknown> | undefined) ?? {};
+      const waId = key["id"];
+      if (typeof waId !== "string") continue;
+
+      const message = (rec["message"] as Record<string, unknown> | undefined) ?? {};
+      const { mediaType, caption } = detectMedia(message);
+      const extended = message["extendedTextMessage"] as Record<string, unknown> | undefined;
+      let text: string | null = null;
+      if (typeof message["conversation"] === "string") text = message["conversation"];
+      else if (extended && typeof extended["text"] === "string") text = extended["text"] as string;
+      else if (mediaType) text = caption;
+      // Reação, enquete, mensagem de sistema etc.: ainda não exibidas.
+      if (text === null && !mediaType) continue;
+
+      const doc = message["documentMessage"] as Record<string, unknown> | undefined;
+      const tsRaw = rec["messageTimestamp"];
+      let tsSec = Number(
+        typeof tsRaw === "object" && tsRaw !== null ? (tsRaw as Record<string, unknown>)["low"] : tsRaw,
+      );
+      if (!Number.isFinite(tsSec) || tsSec <= 0) tsSec = Date.now() / 1000;
+
+      byId.set(waId, {
+        waId,
+        fromMe: key["fromMe"] === true,
+        text,
+        mediaType,
+        fileName: doc && typeof doc["fileName"] === "string" ? (doc["fileName"] as string) : null,
+        timestampMs: tsSec * 1000,
+        status: mapAckStatus(typeof rec["status"] === "string" ? (rec["status"] as string) : undefined),
+      });
+    }
+    return [...byId.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-100);
+  });
+
 type ReconnectQrResult =
   | { status: "qr"; qrCodeBase64: string; pairingCode: string | null }
   | { status: "already-connected" }
