@@ -14,6 +14,7 @@ import type { Contact, Instance, Message } from "@/types/crm";
 import type { ClientInstanceRow } from "./useAuth";
 import { readPreferences } from "./usePreferences";
 import { playNotificationSound } from "@/lib/notification-sound";
+import { contactTagKey, useTags } from "./useTags";
 
 export type SortMode = "recent" | "alpha" | "tag";
 
@@ -73,20 +74,37 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortMode>(() => readPreferences().defaultSort);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const tagStore = useTags();
   const counter = useRef(0);
+
+  // Junta as etiquetas (guardadas à parte) em cada contato. `tag` vira o nome
+  // da primeira etiqueta, só para a ordenação "Etiqueta".
+  const taggedContacts = useMemo(() => {
+    const nameById = new Map(tagStore.tags.map((t) => [t.id, t.name]));
+    return contacts.map((c) => {
+      const ids = (tagStore.assign[contactTagKey(c)] ?? []).filter((id) => nameById.has(id));
+      return { ...c, tag_ids: ids, tag: ids.length ? nameById.get(ids[0]!)! : "" };
+    });
+  }, [contacts, tagStore.tags, tagStore.assign]);
 
   const visibleContacts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = contacts.filter((c) => {
+    const list = taggedContacts.filter((c) => {
       const byInstance = !selectedInstanceId || c.instance_id === selectedInstanceId;
       const byQuery =
         !q || c.name.toLowerCase().includes(q) || c.phone.replace(/\D/g, "").includes(q.replace(/\D/g, "") || q);
       const byFavorite = !favoritesOnly || c.starred;
-      return byInstance && byQuery && byFavorite;
+      const byTag = !tagFilter || (c.tag_ids ?? []).includes(tagFilter);
+      return byInstance && byQuery && byFavorite && byTag;
     });
     return [...list].sort((a, b) => {
       if (sort === "alpha") return a.name.localeCompare(b.name);
-      if (sort === "tag") return a.tag.localeCompare(b.tag) || a.name.localeCompare(b.name);
+      if (sort === "tag") {
+        // Quem tem etiqueta vem primeiro; sem etiqueta vai para o fim.
+        if (!a.tag !== !b.tag) return a.tag ? -1 : 1;
+        return a.tag.localeCompare(b.tag) || a.name.localeCompare(b.name);
+      }
       // Contato sem conversa real ainda (só "Toque para ver a conversa") vale
       // como "sem data": a data dele é só a da sincronização e não pode
       // ficar acima de quem acabou de mandar mensagem.
@@ -94,7 +112,7 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
         c.last_message === CONTACTS_PLACEHOLDER_MESSAGE ? 0 : +new Date(c.last_updated);
       return when(b) - when(a);
     });
-  }, [contacts, selectedInstanceId, search, sort, favoritesOnly]);
+  }, [taggedContacts, selectedInstanceId, search, sort, favoritesOnly, tagFilter]);
 
   const activeContact = useMemo(
     () => visibleContacts.find((c) => c.id === activeContactId) ?? null,
@@ -255,6 +273,21 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
   const toggleStarred = useCallback((id: string) => {
     setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, starred: !c.starred } : c)));
   }, []);
+
+  // Marca/desmarca uma etiqueta no contato aberto.
+  const { toggleTag: storeToggleTag, deleteTag: storeDeleteTag } = tagStore;
+  const toggleContactTag = useCallback(
+    (contact: Contact, tagId: string) => storeToggleTag(contactTagKey(contact), tagId),
+    [storeToggleTag],
+  );
+  // Apagar uma etiqueta que está no filtro volta a lista para "todas".
+  const deleteTag = useCallback(
+    (tagId: string) => {
+      storeDeleteTag(tagId);
+      setTagFilter((cur) => (cur === tagId ? null : cur));
+    },
+    [storeDeleteTag],
+  );
 
   // Consulta getMessageStatus algumas vezes seguidas até achar um status
   // definitivo (delivered/read/failed) ou esgotar as tentativas. Se a
@@ -493,7 +526,7 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
   return {
     instances,
     contacts: visibleContacts,
-    allContacts: contacts,
+    allContacts: taggedContacts,
     totalUnread: contacts.reduce((n, c) => n + c.unread_count, 0),
     messages: activeMessages,
     activeContact,
@@ -509,6 +542,12 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
     favoritesOnly,
     setFavoritesOnly,
     toggleStarred,
+    tags: tagStore.tags,
+    tagFilter,
+    setTagFilter,
+    createTag: tagStore.createTag,
+    deleteTag,
+    toggleContactTag,
     sendMessage,
   };
 }

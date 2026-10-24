@@ -4,6 +4,9 @@ import { usePreferences } from "@/hooks/usePreferences";
 import { cn } from "@/lib/utils";
 import { MessageBubble } from "./MessageBubble";
 import { InstanceTag } from "./InstanceTag";
+import { TagChip } from "./TagChip";
+import { TagPicker } from "./TagPicker";
+import type { Tag } from "@/hooks/useTags";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +39,10 @@ interface Props {
   onSend: (payload: Partial<Message> & Pick<Message, "content_type">) => void;
   onBack: () => void;
   onToggleStar: () => void;
+  tags?: Tag[];
+  onToggleTag?: (tagId: string) => void;
+  onCreateTag?: (name: string, color: string) => Tag | null;
+  onDeleteTag?: (tagId: string) => void;
 }
 
 // Formats a Date as the compact UTC timestamp Google Calendar's "quick add"
@@ -94,7 +101,19 @@ function buildGoogleCalendarUrl(contact: Contact, instance: Instance | undefined
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
-export function ChatPanel({ contact, instance, instances, messages, onSend, onBack, onToggleStar }: Props) {
+export function ChatPanel({
+  contact,
+  instance,
+  instances,
+  messages,
+  onSend,
+  onBack,
+  onToggleStar,
+  tags = [],
+  onToggleTag,
+  onCreateTag,
+  onDeleteTag,
+}: Props) {
   const [draft, setDraft] = useState("");
   const [media, setMedia] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -221,6 +240,14 @@ export function ChatPanel({ contact, instance, instances, messages, onSend, onBa
             <span className="truncate text-xs text-muted-foreground">{contact.phone}</span>
             {instance && <InstanceTag instance={instance} instances={instances} className="text-[11px]" />}
           </div>
+          {(contact.tag_ids ?? []).length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {(contact.tag_ids ?? []).map((id) => {
+                const tag = tags.find((t) => t.id === id);
+                return tag ? <TagChip key={id} tag={tag} /> : null;
+              })}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center">
           <Button
@@ -234,6 +261,15 @@ export function ChatPanel({ contact, instance, instances, messages, onSend, onBa
           >
             <CalendarDays className="size-5" />
           </Button>
+          {onToggleTag && onCreateTag && onDeleteTag && (
+            <TagPicker
+              tags={tags}
+              selectedIds={contact.tag_ids ?? []}
+              onToggle={onToggleTag}
+              onCreate={onCreateTag}
+              onDelete={onDeleteTag}
+            />
+          )}
           <Button
             variant="ghost"
             size="icon"

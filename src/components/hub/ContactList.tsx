@@ -1,6 +1,8 @@
 import { cn } from "@/lib/utils";
 import { instanceAccent } from "@/lib/instance-colors";
 import { InstanceTag } from "./InstanceTag";
+import { TagChip } from "./TagChip";
+import type { Tag } from "@/hooks/useTags";
 import type { Contact, Instance } from "@/types/crm";
 import { relativeTime, type SortMode } from "@/hooks/useHub";
 import { Input } from "@/components/ui/input";
@@ -29,6 +31,9 @@ interface Props {
   onToggleFavoritesOnly: () => void;
   selectedInstanceId: string | null;
   onSelectInstance: (id: string | null) => void;
+  tags: Tag[];
+  tagFilter: string | null;
+  onTagFilter: (id: string | null) => void;
 }
 
 function initials(name: string) {
@@ -52,7 +57,11 @@ export function ContactList({
   onToggleFavoritesOnly,
   selectedInstanceId,
   onSelectInstance,
+  tags,
+  tagFilter,
+  onTagFilter,
 }: Props) {
+  const tagById = new Map(tags.map((t) => [t.id, t]));
   return (
     <div className="flex h-full min-h-0 w-full flex-col border-r border-border bg-card">
       <div className="space-y-2 border-b border-border p-3">
@@ -83,6 +92,24 @@ export function ContactList({
             </SelectContent>
           </Select>
         )}
+        {tags.length > 0 && (
+          <Select value={tagFilter ?? "all"} onValueChange={(v) => onTagFilter(v === "all" ? null : v)}>
+            <SelectTrigger className="w-full" aria-label="Filtrar por etiqueta">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as etiquetas</SelectItem>
+              {tags.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  <span className="flex items-center gap-2">
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} aria-hidden="true" />
+                    {t.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex items-center gap-2">
           <Select value={sort} onValueChange={(v) => onSort(v as SortMode)}>
             <SelectTrigger className="w-full">
@@ -91,7 +118,7 @@ export function ContactList({
             <SelectContent>
               <SelectItem value="recent">Mensagens recentes</SelectItem>
               <SelectItem value="alpha">Alfabética (A-Z)</SelectItem>
-              <SelectItem value="tag">Tag / Departamento</SelectItem>
+              <SelectItem value="tag">Etiqueta</SelectItem>
             </SelectContent>
           </Select>
           <Button
@@ -155,6 +182,14 @@ export function ContactList({
                         <InstanceTag instance={inst} instances={instances} className="text-[10.5px]" />
                       )}
                     </p>
+                    {(contact.tag_ids ?? []).length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {(contact.tag_ids ?? []).map((id) => {
+                          const tag = tagById.get(id);
+                          return tag ? <TagChip key={id} tag={tag} /> : null;
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -175,7 +210,9 @@ export function ContactList({
             <li className="px-4 py-10 text-center text-sm text-muted-foreground">
               {favoritesOnly
                 ? "Nenhuma conversa favoritada ainda. Toque na estrela no topo de uma conversa para guardá-la aqui."
-                : "Nenhum contato encontrado."}
+                : tagFilter
+                  ? "Nenhum contato com essa etiqueta. Abra uma conversa e use o ícone de etiqueta no topo para marcar."
+                  : "Nenhum contato encontrado."}
             </li>
           )}
         </ul>

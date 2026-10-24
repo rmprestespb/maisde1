@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { instanceAccent } from "@/lib/instance-colors";
 import { relativeTime } from "@/hooks/useHub";
+import type { Tag } from "@/hooks/useTags";
+import { TagChip } from "./TagChip";
 import type { Contact, Instance } from "@/types/crm";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,6 +19,7 @@ interface Props {
   contacts: Contact[];
   instances: Instance[];
   onOpenContact: (id: string) => void;
+  tags?: Tag[];
 }
 
 function initials(name: string) {
@@ -32,9 +35,11 @@ function initials(name: string) {
  * Diretório de contatos: todos os contatos de todos os números numa lista
  * só, com busca por nome/telefone e filtro por número. Clicar abre a conversa.
  */
-export function ContactsPage({ contacts, instances, onOpenContact }: Props) {
+export function ContactsPage({ contacts, instances, onOpenContact, tags = [] }: Props) {
   const [search, setSearch] = useState("");
   const [instanceId, setInstanceId] = useState<string>("all");
+  const [tagId, setTagId] = useState<string>("all");
+  const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
 
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -46,10 +51,11 @@ export function ContactsPage({ contacts, instances, onOpenContact }: Props) {
           !q ||
           c.name.toLowerCase().includes(q) ||
           (digits.length > 0 && c.phone.replace(/\D/g, "").includes(digits));
-        return byInstance && byQuery;
+        const byTag = tagId === "all" || (c.tag_ids ?? []).includes(tagId);
+        return byInstance && byQuery && byTag;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [contacts, search, instanceId]);
+  }, [contacts, search, instanceId, tagId]);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 lg:p-6">
@@ -70,6 +76,24 @@ export function ContactsPage({ contacts, instances, onOpenContact }: Props) {
             className="bg-card pl-9"
           />
         </div>
+        {tags.length > 0 && (
+          <Select value={tagId} onValueChange={setTagId}>
+            <SelectTrigger className="w-full bg-card sm:w-56" aria-label="Filtrar por etiqueta">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as etiquetas</SelectItem>
+              {tags.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  <span className="flex items-center gap-2">
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} aria-hidden="true" />
+                    {t.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {instances.length > 1 && (
           <Select value={instanceId} onValueChange={setInstanceId}>
             <SelectTrigger className="w-full bg-card sm:w-64" aria-label="Filtrar por número">
@@ -119,8 +143,15 @@ export function ContactsPage({ contacts, instances, onOpenContact }: Props) {
                       <p className="truncate text-xs text-muted-foreground">
                         {c.phone}
                         {inst ? ` · #${idx + 1} ${inst.label}` : ""}
-                        {c.tag ? ` · ${c.tag}` : ""}
                       </p>
+                      {(c.tag_ids ?? []).length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(c.tag_ids ?? []).map((id) => {
+                            const tag = tagById.get(id);
+                            return tag ? <TagChip key={id} tag={tag} /> : null;
+                          })}
+                        </div>
+                      )}
                     </div>
                     <span className="text-[11px] text-muted-foreground">
                       {relativeTime(c.last_updated)}

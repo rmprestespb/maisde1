@@ -109,6 +109,7 @@ function HubShell({
     // Limpa busca/filtros pra conversa escolhida não ficar escondida por eles.
     hub.setSearch("");
     hub.setFavoritesOnly(false);
+    hub.setTagFilter(null);
     hub.setSelectedInstanceId(null);
     hub.openContact(id);
     setNav("contacts");
@@ -218,6 +219,9 @@ function HubShell({
                   onToggleFavoritesOnly={() => hub.setFavoritesOnly((v) => !v)}
                   selectedInstanceId={hub.selectedInstanceId}
                   onSelectInstance={hub.setSelectedInstanceId}
+                  tags={hub.tags}
+                  tagFilter={hub.tagFilter}
+                  onTagFilter={hub.setTagFilter}
                 />
               </div>
               <div className={cn("min-h-0", !showChat && "hidden lg:block")}>
@@ -229,6 +233,10 @@ function HubShell({
                   onSend={hub.sendMessage}
                   onBack={() => hub.setActiveContactId(null)}
                   onToggleStar={() => hub.activeContactId && hub.toggleStarred(hub.activeContactId)}
+                  tags={hub.tags}
+                  onToggleTag={(tagId) => hub.activeContact && hub.toggleContactTag(hub.activeContact, tagId)}
+                  onCreateTag={hub.createTag}
+                  onDeleteTag={hub.deleteTag}
                 />
               </div>
             </main>
@@ -243,6 +251,7 @@ function HubShell({
                   contacts={hub.allContacts}
                   instances={hub.instances}
                   onOpenContact={openChatWith}
+                  tags={hub.tags}
                 />
               ) : (
                 <HomePanel

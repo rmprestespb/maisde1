@@ -17,7 +17,8 @@ export interface Contact {
   unread_count: number;
   last_message: string;
   last_updated: string; // ISO
-  tag: string;
+  tag: string; // nome da 1ª etiqueta (usado na ordenação)
+  tag_ids?: string[]; // etiquetas do contato (ver useTags)
   avatar_hue: number;
   starred: boolean;
 }
