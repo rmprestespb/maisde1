@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { instanceAccent } from "@/lib/instance-colors";
-import { relativeTime } from "@/hooks/useHub";
+import { CONTACTS_PLACEHOLDER_MESSAGE, relativeTime } from "@/hooks/useHub";
+import { initials } from "@/lib/initials";
 import type { Contact, Instance, InstanceStatus } from "@/types/crm";
 import type { Tag } from "@/hooks/useTags";
 import { GoogleAgendaCard } from "./GoogleAgendaCard";
@@ -47,13 +48,22 @@ const statusDot: Record<InstanceStatus, string> = {
   syncing: "bg-status-syncing",
 };
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("");
+// "há 12 min", "há 3h", "há 2 dias" — há quanto tempo a mensagem espera resposta.
+function waitLabel(iso: string) {
+  const min = Math.max(0, Math.round((Date.now() - +new Date(iso)) / 60000));
+  if (min < 60) return `há ${Math.max(1, min)} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.round(h / 24);
+  return `há ${d} ${d === 1 ? "dia" : "dias"}`;
+}
+
+// Vermelho: mais de 24h esperando. Amarelo: mais de 2h. Cinza: recente.
+function waitStyle(iso: string) {
+  const h = (Date.now() - +new Date(iso)) / 3_600_000;
+  if (h >= 24) return "bg-status-offline/15 text-foreground";
+  if (h >= 2) return "bg-status-syncing/25 text-foreground";
+  return "bg-muted text-muted-foreground";
 }
 
 function isToday(iso: string) {
@@ -106,9 +116,18 @@ export function HomePanel({
   const firstName = name.split(" ")[0] || name;
   const activeCount = instances.filter((i) => i.status === "connected").length;
   const todayCount = contacts.filter((c) => isToday(c.last_updated)).length;
-  const recent = [...contacts]
+  // Só conversas de verdade: contato sincronizado que nunca trocou mensagem
+  // ("Toque para ver a conversa") não entra, a hora dele é só a da sincronização.
+  const recent = contacts
+    .filter((c) => c.last_message !== CONTACTS_PLACEHOLDER_MESSAGE)
     .sort((a, b) => +new Date(b.last_updated) - +new Date(a.last_updated))
     .slice(0, 15);
+  // Aguardando resposta: o cliente escreveu por último e ninguém respondeu ainda.
+  // Quem espera há mais tempo vem primeiro.
+  const waiting = contacts
+    .filter((c) => c.last_from_me === false && c.last_message !== CONTACTS_PLACEHOLDER_MESSAGE && !c.archived)
+    .sort((a, b) => +new Date(a.last_updated) - +new Date(b.last_updated))
+    .slice(0, 30);
   const problems = instances.filter((i) => i.status !== "connected");
 
   return (
@@ -268,6 +287,60 @@ export function HomePanel({
           </section>
 
           <section className="flex min-h-0 flex-col rounded-xl border border-border bg-card p-4 xl:flex-1">
+            <h2 className="mb-2 flex shrink-0 items-center justify-between text-base font-semibold text-foreground">
+              Aguardando resposta
+              {waiting.length > 0 && (
+                <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold tabular-nums text-accent-foreground">
+                  {waiting.length}
+                </span>
+              )}
+            </h2>
+            {waiting.length === 0 ? (
+              <p className="flex items-center gap-2.5 rounded-lg bg-status-online/10 px-3 py-2 text-sm text-foreground">
+                <CheckCircle2 className="size-4 shrink-0 text-status-online" />
+                Ninguém esperando resposta.
+              </p>
+            ) : (
+              <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+                {waiting.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => onOpenContact(c.id)}
+                      className="flex w-full items-center gap-3 py-2.5 text-left transition-colors hover:bg-accent/60"
+                    >
+                      <Avatar className="size-9 shrink-0">
+                        <AvatarFallback
+                          style={{ backgroundColor: `oklch(0.9 0.06 ${c.avatar_hue})` }}
+                          className="text-xs font-semibold text-slate-900"
+                        >
+                          {initials(c.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">{c.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{c.last_message}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                          waitStyle(c.last_updated),
+                        )}
+                      >
+                        {waitLabel(c.last_updated)}
+                      </span>
+                      {c.unread_count > 0 && (
+                        <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-status-online px-1.5 text-[11px] font-bold text-slate-900">
+                          {c.unread_count}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="flex min-h-0 flex-col rounded-xl border border-border bg-card p-4 xl:max-h-60 xl:shrink-0">
             <h2 className="mb-3 shrink-0 text-base font-semibold text-foreground">Etiquetas</h2>
             {tags.length === 0 ? (
               <p className="py-4 text-sm text-muted-foreground">

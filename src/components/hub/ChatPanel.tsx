@@ -8,6 +8,7 @@ import { TagChip } from "./TagChip";
 import { TagPicker } from "./TagPicker";
 import type { Tag } from "@/hooks/useTags";
 import { exportConversation } from "@/lib/export-chat";
+import { initials } from "@/lib/initials";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -235,7 +236,7 @@ export function ChatPanel({
               style={{ backgroundColor: `oklch(0.9 0.06 ${contact.avatar_hue})` }}
               className="text-xs font-semibold text-slate-900"
             >
-              {contact.name.slice(0, 2)}
+              {initials(contact.name)}
             </AvatarFallback>
           </Avatar>
         </div>

@@ -27,7 +27,7 @@ const INSTANCE_POLL_MS = 15_000;
 // Contatos mudam bem menos que o status da instância, então o intervalo pode
 // ser mais espaçado.
 const CONTACTS_POLL_MS = 30_000;
-const CONTACTS_PLACEHOLDER_MESSAGE = "Toque para ver a conversa";
+export const CONTACTS_PLACEHOLDER_MESSAGE = "Toque para ver a conversa";
 
 // O 201 que o /message/sendText devolve só confirma que a Evolution API
 // ACEITOU a mensagem (status "PENDING"), não que ela chegou de verdade no
@@ -207,6 +207,7 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
               ...fresh,
               starred: existing.starred,
               unread_count: existing.unread_count,
+              last_from_me: existing.last_from_me,
               last_message: hasRealPreview ? existing.last_message : fresh.last_message,
               // Com mensagem real, a data é a dela; a data do contato na API é
               // só a da sincronização e jogaria a conversa pro lugar errado.
@@ -376,6 +377,7 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
                 ...c,
                 last_message: msg.text ?? labelFor(msg.content_type),
                 last_updated: msg.timestamp,
+                last_from_me: true,
               }
             : c,
         ),
@@ -525,6 +527,7 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
               unread_count: 1,
               last_message: chat.text,
               last_updated: new Date(chat.timestampMs).toISOString(),
+              last_from_me: false,
               tag: "",
               avatar_hue: chat.avatarHue,
               starred: false,
@@ -533,8 +536,17 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
             const chat = latest.find((l) => l.contactId === c.id);
             const isNewForThisContact = newInbound.some((m) => m.contactId === c.id);
             let next = c;
-            if (chat && (c.last_message === CONTACTS_PLACEHOLDER_MESSAGE || chat.timestampMs > +new Date(c.last_updated))) {
-              next = { ...next, last_message: chat.text, last_updated: new Date(chat.timestampMs).toISOString() };
+            const lastMs = +new Date(c.last_updated);
+            if (chat && (c.last_message === CONTACTS_PLACEHOLDER_MESSAGE || chat.timestampMs > lastMs)) {
+              next = {
+                ...next,
+                last_message: chat.text,
+                last_updated: new Date(chat.timestampMs).toISOString(),
+                last_from_me: chat.fromMe,
+              };
+            } else if (chat && c.last_from_me === undefined && Math.abs(chat.timestampMs - lastMs) < 5000) {
+              // Mesma mensagem que já estava na prévia: só descobre de quem foi.
+              next = { ...next, last_from_me: chat.fromMe };
             }
             if (isNewForThisContact) {
               next = { ...next, unread_count: c.id === activeContactId ? 0 : next.unread_count + 1 };

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { initials } from "@/lib/initials";
 import { instanceAccent } from "@/lib/instance-colors";
 import { InstanceTag } from "./InstanceTag";
 import { TagChip } from "./TagChip";
@@ -38,13 +39,6 @@ interface Props {
   onToggleShowArchived: () => void;
 }
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("");
-}
 
 export function ContactList({
   contacts,

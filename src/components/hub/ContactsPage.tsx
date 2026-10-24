@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { instanceAccent } from "@/lib/instance-colors";
+import { initials } from "@/lib/initials";
 import { relativeTime } from "@/hooks/useHub";
 import type { Tag } from "@/hooks/useTags";
 import { TagChip } from "./TagChip";
@@ -22,14 +23,6 @@ interface Props {
   tags?: Tag[];
 }
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("");
-}
 
 /**
  * Diretório de contatos: todos os contatos de todos os números numa lista
