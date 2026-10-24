@@ -507,6 +507,8 @@ export type ChatPreview = {
   fromMe: boolean;
   timestampMs: number;
   mediaType: "image" | "video" | "audio" | "document" | null;
+  // Legenda da mídia (sem o emoji/rótulo), quando houver.
+  caption: string | null;
   // Número (instância) que recebeu a conversa + dados prontos pra criar o
   // contato na lista quando quem escreveu ainda não está nos contatos.
   instanceName: string;
@@ -634,6 +636,7 @@ export const getLatestChats = createServerFn({ method: "GET" })
         fromMe: key["fromMe"] === true,
         timestampMs,
         mediaType,
+        caption,
         instanceName,
         phone: formatPhone(jid),
         avatarHue: hashHue(jid),
@@ -642,6 +645,45 @@ export const getLatestChats = createServerFn({ method: "GET" })
     return [...best.values()];
   },
 );
+
+export type WhatsAppMediaFile = {
+  base64: string;
+  mimetype: string;
+  fileName: string | null;
+};
+
+type GetMediaInput = { messageId: string } & WithInstance;
+
+/**
+ * Baixa o arquivo de uma mídia RECEBIDA (foto/vídeo/áudio/documento) pela
+ * Evolution — /chat/getBase64FromMediaMessage — pra tela poder mostrar de
+ * verdade, em vez de só o rótulo "📷 Foto". Chamada sob demanda (só quando a
+ * mensagem aparece na conversa), nunca em loop.
+ */
+export const getWhatsAppMedia = createServerFn({ method: "POST" })
+  .validator((data: GetMediaInput) => data)
+  .handler(async ({ data }): Promise<WhatsAppMediaFile> => {
+    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const res = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instanceName}`, {
+      method: "POST",
+      headers: { apikey: apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: { key: { id: data.messageId } }, convertToMp4: false }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!res.ok) {
+      throw new Error(`Evolution API respondeu ${res.status} ao baixar a midia`);
+    }
+    const json = (await res.json()) as Record<string, unknown>;
+    const base64 = json["base64"];
+    if (typeof base64 !== "string" || !base64) {
+      throw new Error("Evolution API nao devolveu o arquivo da midia");
+    }
+    return {
+      base64: base64.replace(/^data:[^;]*;base64,/, ""),
+      mimetype: typeof json["mimetype"] === "string" ? (json["mimetype"] as string) : "application/octet-stream",
+      fileName: typeof json["fileName"] === "string" ? (json["fileName"] as string) : null,
+    };
+  });
 
 type ReconnectQrResult =
   | { status: "qr"; qrCodeBase64: string; pairingCode: string | null }

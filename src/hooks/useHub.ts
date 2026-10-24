@@ -374,12 +374,16 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
                 // getLatestChats já identifica imagem/vídeo/áudio/documento
                 // (mediaType) — isso só cai pra "text" quando é mensagem de
                 // texto de verdade ou um tipo ainda não suportado aqui.
-                // Mídia recebida ainda não baixa o arquivo (só o texto/label
-                // tipo "📷 Foto: legenda"), por isso content_type continua
-                // "text" mesmo pra mídia — próxima etapa é baixar de
-                // verdade e trocar pro content_type real com payload_url.
-                content_type: "text",
-                text: chat.text,
+                // Mídia recebida: o arquivo é buscado sob demanda pela tela
+                // (MessageBubble) usando wa_message_id/wa_instance.
+                content_type: chat.mediaType ?? "text",
+                ...(chat.mediaType
+                  ? {
+                      ...(chat.caption ? { text: chat.caption } : {}),
+                      wa_message_id: chat.messageId,
+                      wa_instance: chat.instanceName,
+                    }
+                  : { text: chat.text }),
                 timestamp: new Date(chat.timestampMs).toISOString(),
                 status: "delivered",
               }));

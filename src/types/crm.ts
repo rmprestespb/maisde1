@@ -38,4 +38,7 @@ export interface Message {
   duration?: string;
   timestamp: string; // ISO
   status: MessageStatus;
+  // Mídia recebida do WhatsApp: a tela busca o arquivo sob demanda por estes dados.
+  wa_message_id?: string;
+  wa_instance?: string;
 }
