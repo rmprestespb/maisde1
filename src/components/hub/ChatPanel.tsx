@@ -7,6 +7,7 @@ import { InstanceTag } from "./InstanceTag";
 import { TagChip } from "./TagChip";
 import { TagPicker } from "./TagPicker";
 import type { Tag } from "@/hooks/useTags";
+import { exportConversation } from "@/lib/export-chat";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,6 +44,8 @@ interface Props {
   onToggleTag?: (tagId: string) => void;
   onCreateTag?: (name: string, color: string) => Tag | null;
   onDeleteTag?: (tagId: string) => void;
+  onToggleArchive?: () => void;
+  onMarkUnread?: () => void;
 }
 
 // Formats a Date as the compact UTC timestamp Google Calendar's "quick add"
@@ -113,6 +116,8 @@ export function ChatPanel({
   onToggleTag,
   onCreateTag,
   onDeleteTag,
+  onToggleArchive,
+  onMarkUnread,
 }: Props) {
   const [draft, setDraft] = useState("");
   const [media, setMedia] = useState<string | null>(null);
@@ -290,9 +295,13 @@ export function ChatPanel({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>Arquivar conversa</DropdownMenuItem>
-              <DropdownMenuItem>Marcar como não lida</DropdownMenuItem>
-              <DropdownMenuItem>Exportar histórico</DropdownMenuItem>
+              <DropdownMenuItem onClick={onToggleArchive}>
+                {contact.archived ? "Desarquivar conversa" : "Arquivar conversa"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onMarkUnread}>Marcar como não lida</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportConversation(contact, messages)}>
+                Exportar histórico
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

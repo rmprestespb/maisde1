@@ -19,6 +19,7 @@ export interface Contact {
   last_updated: string; // ISO
   tag: string; // nome da 1ª etiqueta (usado na ordenação)
   tag_ids?: string[]; // etiquetas do contato (ver useTags)
+  archived?: boolean; // conversa arquivada (ver useArchived)
   avatar_hue: number;
   starred: boolean;
 }

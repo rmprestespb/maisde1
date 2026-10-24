@@ -110,6 +110,7 @@ function HubShell({
     hub.setSearch("");
     hub.setFavoritesOnly(false);
     hub.setTagFilter(null);
+    hub.setShowArchived(false);
     hub.setSelectedInstanceId(null);
     hub.openContact(id);
     setNav("contacts");
@@ -222,6 +223,8 @@ function HubShell({
                   tags={hub.tags}
                   tagFilter={hub.tagFilter}
                   onTagFilter={hub.setTagFilter}
+                  showArchived={hub.showArchived}
+                  onToggleShowArchived={() => hub.setShowArchived((v) => !v)}
                 />
               </div>
               <div className={cn("min-h-0", !showChat && "hidden lg:block")}>
@@ -237,6 +240,8 @@ function HubShell({
                   onToggleTag={(tagId) => hub.activeContact && hub.toggleContactTag(hub.activeContact, tagId)}
                   onCreateTag={hub.createTag}
                   onDeleteTag={hub.deleteTag}
+                  onToggleArchive={() => hub.activeContact && hub.toggleArchived(hub.activeContact)}
+                  onMarkUnread={() => hub.activeContact && hub.markUnread(hub.activeContact)}
                 />
               </div>
             </main>

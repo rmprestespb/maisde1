@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Search, Star } from "lucide-react";
+import { Archive, Search, Star } from "lucide-react";
 
 interface Props {
   contacts: Contact[];
@@ -34,6 +34,8 @@ interface Props {
   tags: Tag[];
   tagFilter: string | null;
   onTagFilter: (id: string | null) => void;
+  showArchived: boolean;
+  onToggleShowArchived: () => void;
 }
 
 function initials(name: string) {
@@ -60,6 +62,8 @@ export function ContactList({
   tags,
   tagFilter,
   onTagFilter,
+  showArchived,
+  onToggleShowArchived,
 }: Props) {
   const tagById = new Map(tags.map((t) => [t.id, t]));
   return (
@@ -135,6 +139,17 @@ export function ContactList({
               }
             />
           </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="shrink-0"
+            aria-label="Mostrar conversas arquivadas"
+            aria-pressed={showArchived}
+            title={showArchived ? "Voltar às conversas" : "Ver conversas arquivadas"}
+            onClick={onToggleShowArchived}
+          >
+            <Archive className={showArchived ? "size-4 text-primary" : "size-4 text-muted-foreground"} />
+          </Button>
         </div>
       </div>
 
@@ -208,7 +223,9 @@ export function ContactList({
           })}
           {contacts.length === 0 && (
             <li className="px-4 py-10 text-center text-sm text-muted-foreground">
-              {favoritesOnly
+              {showArchived
+                ? "Nenhuma conversa arquivada. Use os três pontos no topo de uma conversa para arquivar."
+                : favoritesOnly
                 ? "Nenhuma conversa favoritada ainda. Toque na estrela no topo de uma conversa para guardá-la aqui."
                 : tagFilter
                   ? "Nenhum contato com essa etiqueta. Abra uma conversa e use o ícone de etiqueta no topo para marcar."

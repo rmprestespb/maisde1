@@ -15,6 +15,7 @@ import type { ClientInstanceRow } from "./useAuth";
 import { readPreferences } from "./usePreferences";
 import { playNotificationSound } from "@/lib/notification-sound";
 import { contactTagKey, useTags } from "./useTags";
+import { useArchived } from "./useArchived";
 
 export type SortMode = "recent" | "alpha" | "tag";
 
@@ -76,6 +77,9 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const tagStore = useTags();
+  const archivedStore = useArchived();
+  const { setArchived, unarchiveMany } = archivedStore;
+  const [showArchived, setShowArchived] = useState(false);
   const counter = useRef(0);
 
   // Junta as etiquetas (guardadas à parte) em cada contato. `tag` vira o nome
@@ -84,9 +88,14 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
     const nameById = new Map(tagStore.tags.map((t) => [t.id, t.name]));
     return contacts.map((c) => {
       const ids = (tagStore.assign[contactTagKey(c)] ?? []).filter((id) => nameById.has(id));
-      return { ...c, tag_ids: ids, tag: ids.length ? nameById.get(ids[0]!)! : "" };
+      return {
+        ...c,
+        tag_ids: ids,
+        tag: ids.length ? nameById.get(ids[0]!)! : "",
+        archived: archivedStore.archived.has(contactTagKey(c)),
+      };
     });
-  }, [contacts, tagStore.tags, tagStore.assign]);
+  }, [contacts, tagStore.tags, tagStore.assign, archivedStore.archived]);
 
   const visibleContacts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -96,7 +105,8 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
         !q || c.name.toLowerCase().includes(q) || c.phone.replace(/\D/g, "").includes(q.replace(/\D/g, "") || q);
       const byFavorite = !favoritesOnly || c.starred;
       const byTag = !tagFilter || (c.tag_ids ?? []).includes(tagFilter);
-      return byInstance && byQuery && byFavorite && byTag;
+      const byArchive = showArchived ? !!c.archived : !c.archived;
+      return byInstance && byQuery && byFavorite && byTag && byArchive;
     });
     return [...list].sort((a, b) => {
       if (sort === "alpha") return a.name.localeCompare(b.name);
@@ -112,11 +122,13 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
         c.last_message === CONTACTS_PLACEHOLDER_MESSAGE ? 0 : +new Date(c.last_updated);
       return when(b) - when(a);
     });
-  }, [taggedContacts, selectedInstanceId, search, sort, favoritesOnly, tagFilter]);
+  }, [taggedContacts, selectedInstanceId, search, sort, favoritesOnly, tagFilter, showArchived]);
 
+  // Procura em todos os contatos (não só nos filtrados): trocar de filtro ou
+  // de etiqueta não fecha a conversa que está aberta.
   const activeContact = useMemo(
-    () => visibleContacts.find((c) => c.id === activeContactId) ?? null,
-    [visibleContacts, activeContactId],
+    () => taggedContacts.find((c) => c.id === activeContactId) ?? null,
+    [taggedContacts, activeContactId],
   );
 
   const activeMessages = useMemo(
@@ -289,6 +301,26 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
     [storeDeleteTag],
   );
 
+  // Arquivar esconde a conversa da lista principal (e fecha ela, se estiver
+  // aberta); desarquivar traz de volta. Nada é apagado.
+  const toggleArchived = useCallback(
+    (contact: Contact) => {
+      const willArchive = !contact.archived;
+      setArchived(contactTagKey(contact), willArchive);
+      if (willArchive) setActiveContactId((cur) => (cur === contact.id ? null : cur));
+    },
+    [setArchived],
+  );
+
+  // "Marcar como não lida": volta a bolinha de não lidas e fecha a conversa
+  // (se ela continuasse aberta, seria lida de novo na hora).
+  const markUnread = useCallback((contact: Contact) => {
+    setContacts((prev) =>
+      prev.map((c) => (c.id === contact.id ? { ...c, unread_count: Math.max(1, c.unread_count) } : c)),
+    );
+    setActiveContactId((cur) => (cur === contact.id ? null : cur));
+  }, []);
+
   // Consulta getMessageStatus algumas vezes seguidas até achar um status
   // definitivo (delivered/read/failed) ou esgotar as tentativas. Se a
   // mensagem já não estiver mais na lista (ex.: trocou de contato e voltou,
@@ -439,6 +471,8 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
         });
 
         if (newInbound.length > 0) {
+          // Mensagem nova numa conversa arquivada: ela volta pra lista principal.
+          unarchiveMany(newInbound.map((chat) => `${chat.instanceName}|${chat.contactId}`));
           setMessages((prev) => {
             const existingIds = new Set(prev.map((m) => m.id));
             const additions: Message[] = newInbound
@@ -548,6 +582,10 @@ export function useHub(clientInstances: ClientInstanceRow[]) {
     createTag: tagStore.createTag,
     deleteTag,
     toggleContactTag,
+    showArchived,
+    setShowArchived,
+    toggleArchived,
+    markUnread,
     sendMessage,
   };
 }
