@@ -21,7 +21,7 @@ const inputGold =
  */
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full bg-[#1c0308]">
+    <div className="flex min-h-screen w-full bg-[#050505]">
       {/* A arte ocupa a altura toda da tela e a largura segue a proporção dela
           (sem faixa vazia); todo o resto da largura fica para o painel bordô.
           Em telas mais "quadradas" a arte encolhe para sobrar 28rem ao painel. */}
@@ -31,11 +31,11 @@ function Shell({ children }: { children: ReactNode }) {
         style={{
           aspectRatio: "1113 / 941",
           maxWidth: "calc(100vw - 28rem)",
-          backgroundImage: "url(/brand/auth-bg-v2.jpg)",
+          backgroundImage: "url(/brand/auth-bg-v3.jpg)",
           backgroundSize: "contain",
           backgroundPosition: "left center",
           backgroundRepeat: "no-repeat",
-          backgroundColor: "#220509",
+          backgroundColor: "#0a0a0a",
         }}
       />
       <div
@@ -43,7 +43,7 @@ function Shell({ children }: { children: ReactNode }) {
         style={{
           background:
             "radial-gradient(120% 70% at 85% 0%, rgba(212,175,87,0.14) 0%, rgba(212,175,87,0) 55%)," +
-            "linear-gradient(165deg, #5a1423 0%, #3a0b15 55%, #24060d 100%)",
+            "linear-gradient(165deg, #17140f 0%, #0b0a08 55%, #040404 100%)",
         }}
       >
         {/* moldura fina dourada, como no desenho da marca */}
@@ -51,9 +51,22 @@ function Shell({ children }: { children: ReactNode }) {
           aria-hidden
           className="pointer-events-none absolute inset-4 rounded-[2rem] border border-[#D4AF57]/25"
         />
-        <div className="relative z-10 w-full max-w-sm xl:max-w-md">{children}</div>
+        <div className="relative z-10 w-full max-w-sm xl:max-w-md">
+          {children}
+          <PartnerBadge />
+        </div>
       </div>
     </div>
+  );
+}
+
+// Selo de parceria, abaixo do formulário (texto real, não imagem).
+function PartnerBadge() {
+  return (
+    <p className="mt-14 text-center text-2xl font-bold tracking-tight text-white">
+      <span className="font-medium text-[#f1d58a]">Parceria</span> Rede<span style={{ color: GOLD }}>BPO</span>
+      <span style={{ color: GOLD }}>.</span>
+    </p>
   );
 }
 
@@ -64,7 +77,7 @@ function LoginMark({ size = "lg" }: { size?: "lg" | "sm" }) {
       aria-hidden
       className={
         "grid shrink-0 place-items-center rounded-2xl border border-[#D4AF57]/70 font-serif font-bold " +
-        "bg-gradient-to-br from-[#7a1c2e] to-[#3a0b15] text-[#D4AF57] shadow-[0_0_24px_rgba(212,175,87,0.25)] " +
+        "bg-gradient-to-br from-[#24201a] to-[#080807] text-[#D4AF57] shadow-[0_0_24px_rgba(212,175,87,0.25)] " +
         (size === "lg" ? "size-16 text-2xl" : "size-12 text-xl")
       }
     >
@@ -156,7 +169,13 @@ function LoadingScreen() {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => Promise<string | null> }) {
+function LoginScreen({
+  onLogin,
+  notice,
+}: {
+  onLogin: (u: string, p: string) => Promise<string | null>;
+  notice?: string | null;
+}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +214,11 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => Promise<s
           </div>
         </div>
         <PasswordField id="login-pass" label="Senha" value={password} onChange={setPassword} autoComplete="current-password" />
+        {notice && !error && (
+          <p role="alert" className="rounded-lg border border-[#D4AF57]/40 bg-black/25 px-3 py-2 text-sm text-[#f1d58a]">
+            {notice}
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-sm text-red-300">
             {error}
@@ -238,7 +262,7 @@ function TermsScreen({ auth }: { auth: AuthState }) {
       style={{
         background:
           "radial-gradient(120% 70% at 85% 0%, rgba(212,175,87,0.14) 0%, rgba(212,175,87,0) 55%)," +
-          "linear-gradient(165deg, #5a1423 0%, #3a0b15 55%, #24060d 100%)",
+          "linear-gradient(165deg, #17140f 0%, #0b0a08 55%, #040404 100%)",
       }}
     >
       <div className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-3xl border border-[#D4AF57]/40 bg-black/25 p-6 shadow-[0_25px_70px_rgba(0,0,0,0.5)] sm:p-8">
@@ -301,7 +325,7 @@ export function AuthGate({ auth, children }: { auth: AuthState; children: ReactN
     return <LoadingScreen />;
   }
   if (!auth.isUnlocked) {
-    return <LoginScreen onLogin={auth.login} />;
+    return <LoginScreen onLogin={auth.login} notice={auth.blockedReason} />;
   }
   // Logado, mas ainda checando se já aceitou esta versão do regulamento.
   if (auth.termsAccepted === null) {

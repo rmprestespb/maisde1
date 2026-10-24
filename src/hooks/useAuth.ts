@@ -3,8 +3,11 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase, usernameToEmail } from "@/lib/supabase";
 import { REGULAMENTO_VERSION } from "@/lib/regulamento";
 
+export type Role = "master" | "owner" | "manager" | "agent";
+
 export interface Profile {
   id: string;
+  role: Role;
   account_type: "individual" | "empresa" | "empresa_employee";
   name: string;
   username: string;
@@ -51,6 +54,9 @@ export function useAuth() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(() => !hasPersistedSession());
   const [instances, setInstances] = useState<ClientInstanceRow[]>([]);
+  // Motivo de a pessoa ter sido barrada (conta/empresa desativada ou suspensa).
+  // A tela de login mostra esse aviso depois do logout automático.
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -63,6 +69,9 @@ export function useAuth() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // Carrega o perfil e confere se a conta (e a empresa) podem entrar. Roda no
+  // login e de novo a cada minuto: se o admin suspender a empresa ou
+  // desativar a pessoa, ela é desconectada em até ~1 minuto.
   useEffect(() => {
     let cancelled = false;
     const userId = session?.user?.id;
@@ -70,27 +79,59 @@ export function useAuth() {
       setProfile(null);
       return;
     }
-    supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle()
-      .then(async ({ data, error }) => {
-        if (cancelled) return;
-        if (error || !data) {
-          setProfile(null);
-          return;
+
+    const check = async (first: boolean) => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        if (first) setProfile(null);
+        return;
+      }
+      const p = data as Profile;
+      let reason: string | null = null;
+      if (!p.active) {
+        reason = "Sua conta está desativada. Fale com o administrador.";
+      } else if (!p.is_platform_admin) {
+        const ownerId = p.company_id ?? p.id;
+        if (p.company_id) {
+          const { data: owner } = await supabase
+            .from("profiles")
+            .select("active")
+            .eq("id", p.company_id)
+            .maybeSingle();
+          if (cancelled) return;
+          if (owner && !owner.active) reason = "A conta da sua empresa está desativada.";
         }
-        if (!data.active) {
-          // Conta desativada pelo admin — não deixa continuar logado.
-          await supabase.auth.signOut();
-          setProfile(null);
-          return;
+        if (!reason) {
+          const { data: settings } = await supabase
+            .from("company_settings")
+            .select("suspended")
+            .eq("company_id", ownerId)
+            .maybeSingle();
+          if (cancelled) return;
+          if (settings?.suspended) reason = "O acesso da sua empresa está suspenso. Fale com o administrador.";
         }
-        setProfile(data as Profile);
-      });
+      }
+      if (reason) {
+        setBlockedReason(reason);
+        await supabase.auth.signOut();
+        setProfile(null);
+        return;
+      }
+      setBlockedReason(null);
+      // Só troca o objeto quando algo mudou, pra não refazer buscas à toa.
+      setProfile((prev) => (prev && JSON.stringify(prev) === JSON.stringify(p) ? prev : p));
+    };
+
+    void check(true);
+    const timer = window.setInterval(() => void check(false), 60_000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [session?.user?.id]);
 
@@ -100,6 +141,7 @@ export function useAuth() {
   // own or company instances" (004_varios_numeros_por_cliente.sql) é o que
   // permite ler os números da empresa mesmo logado como funcionário.
   const ownerId = profile ? (profile.company_id ?? profile.id) : null;
+  const role: Role | null = profile ? (profile.is_platform_admin ? "master" : (profile.role ?? "agent")) : null;
   const fetchInstances = useCallback(async () => {
     if (!ownerId) {
       setInstances([]);
@@ -168,6 +210,7 @@ export function useAuth() {
   }
 
   async function login(username: string, password: string): Promise<string | null> {
+    setBlockedReason(null);
     const { error } = await supabase.auth.signInWithPassword({
       email: usernameToEmail(username),
       password,
@@ -203,9 +246,12 @@ export function useAuth() {
     // refetchInstances: chama de novo depois de criar um número novo no
     // QrModal, pra lista atualizar sem precisar recarregar a página.
     refetchInstances: fetchInstances,
-    // Só a conta raiz (dona) pode criar/remover número — null quando é
-    // funcionário (nesse caso quem adiciona número é o dono da empresa).
-    canManageInstances: !!profile && !profile.company_id,
+    // Só o dono da empresa (ou o master) conecta/remove número.
+    canManageInstances: role === "master" || role === "owner",
+    // Dono, gerente e master mexem na equipe e nos grupos.
+    canManageTeam: role === "master" || role === "owner" || role === "manager",
+    role,
+    blockedReason,
     ownerProfileId: ownerId,
     termsAccepted,
     acceptTerms,

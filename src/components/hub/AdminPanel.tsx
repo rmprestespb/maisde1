@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { useAdminAccounts, type AccountType } from "@/hooks/useAdminAccounts";
+import { useCompanies, type AccountType, type CompanyRow } from "@/hooks/useAdminAccounts";
+import { TeamPanel } from "@/components/hub/TeamPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -13,64 +13,57 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building2, Plus, ShieldCheck, Trash2, User } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ArrowLeft, Building2, KeyRound, Pause, Play, Plus, ShieldCheck, SlidersHorizontal, Trash2, User, UsersRound } from "lucide-react";
 
-function NewAccountDialog({
+function intOr(v: string, fallback: number) {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+function NewCompanyDialog({
   open,
   onOpenChange,
-  addAccount,
+  onSave,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  addAccount: ReturnType<typeof useAdminAccounts>["addAccount"];
+  onSave: ReturnType<typeof useCompanies>["addCompany"];
 }) {
-  const [type, setType] = useState<AccountType>("individual");
+  const [type, setType] = useState<AccountType>("empresa");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [maxInstances, setMaxInstances] = useState("1");
+  const [maxUsers, setMaxUsers] = useState("5");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const reset = () => {
-    setType("individual");
+    setType("empresa");
     setName("");
     setUsername("");
     setPassword("");
+    setMaxInstances("1");
+    setMaxUsers("5");
     setError(null);
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (name.trim().length < 2) {
-      setError(type === "empresa" ? "Digite o nome da empresa." : "Digite o nome do cliente.");
-      return;
-    }
-    if (username.trim().length < 3) {
-      setError("O usuário precisa ter pelo menos 3 caracteres.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("A senha precisa ter pelo menos 6 caracteres.");
-      return;
-    }
     setSaving(true);
-    const err = await addAccount(type, name, username, password);
+    const err = await onSave({
+      accountType: type,
+      name,
+      username,
+      password,
+      maxInstances: intOr(maxInstances, 1),
+      maxUsers: type === "individual" ? 1 : Math.max(1, intOr(maxUsers, 5)),
+    });
     setSaving(false);
     if (err) {
-      setError(
-        err.toLowerCase().includes("already registered") || err.toLowerCase().includes("duplicate")
-          ? "Já existe um cliente com esse usuário."
-          : err,
-      );
+      setError(err);
       return;
     }
     reset();
@@ -82,38 +75,52 @@ function NewAccountDialog({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Novo cliente</DialogTitle>
-          <DialogDescription>Cria o acesso que você vai vender — o cliente entra com esse usuário e senha.</DialogDescription>
+          <DialogDescription>Cria o login e a senha que você vai vender. O dono entra e cria a própria equipe.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>Tipo de plano</Label>
-            <Select value={type} onValueChange={(v) => setType(v as AccountType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="individual">Individual (1 pessoa)</SelectItem>
-                <SelectItem value="empresa">Empresa (cria login pros funcionários)</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-2">
+            {(["empresa", "individual"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                  type === t ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-accent",
+                )}
+              >
+                <span className="block font-medium">{t === "empresa" ? "Empresa" : "Individual"}</span>
+                <span className="block text-xs">{t === "empresa" ? "Dono + equipe e grupos" : "1 pessoa só"}</span>
+              </button>
+            ))}
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="acc-name">{type === "empresa" ? "Nome da empresa" : "Nome do cliente"}</Label>
-            <Input id="acc-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={type === "empresa" ? "ex: Kaeth Soluções" : "ex: Maria Silva"} />
+            <Label htmlFor="co-name">{type === "empresa" ? "Nome da empresa" : "Nome do cliente"}</Label>
+            <Input id="co-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={type === "empresa" ? "ex: Kaeth Soluções" : "ex: Maria Silva"} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="acc-user">Usuário</Label>
-            <Input id="acc-user" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ex: maria" />
+            <Label htmlFor="co-user">Usuário do dono</Label>
+            <Input id="co-user" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ex: kaeth" autoCapitalize="none" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="acc-pass">Senha</Label>
-            <Input id="acc-pass" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Label htmlFor="co-pass">Senha (mínimo 8 caracteres)</Label>
+            <Input id="co-pass" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="co-inst">Números de WhatsApp</Label>
+              <Input id="co-inst" inputMode="numeric" value={maxInstances} onChange={(e) => setMaxInstances(e.target.value)} />
+            </div>
+            {type === "empresa" && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="co-users">Logins (com o dono)</Label>
+                <Input id="co-users" inputMode="numeric" value={maxUsers} onChange={(e) => setMaxUsers(e.target.value)} />
+              </div>
+            )}
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter className="mt-1">
-            <Button type="submit" disabled={saving}>
-              {saving ? "Criando..." : "Criar acesso"}
-            </Button>
+            <Button type="submit" disabled={saving}>{saving ? "Criando..." : "Criar acesso"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -121,98 +128,234 @@ function NewAccountDialog({
   );
 }
 
-export function AdminPanel() {
-  const { accounts, loading, error, addAccount, toggleActive, removeAccount } = useAdminAccounts();
-  const [dialogOpen, setDialogOpen] = useState(false);
+function LimitsDialog({
+  company,
+  onClose,
+  onSave,
+}: {
+  company: CompanyRow;
+  onClose: () => void;
+  onSave: (id: string, maxInstances: number, maxUsers: number) => Promise<string | null>;
+}) {
+  const [maxInstances, setMaxInstances] = useState(String(company.maxInstances));
+  const [maxUsers, setMaxUsers] = useState(String(company.maxUsers));
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const err = await onSave(company.profile.id, intOr(maxInstances, 1), Math.max(1, intOr(maxUsers, 1)));
+    setSaving(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    onClose();
+  };
 
   return (
-    <div className="mx-auto h-full max-w-3xl overflow-y-auto px-4 py-6 sm:px-6">
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-xs">
+        <DialogHeader>
+          <DialogTitle>Limites do plano</DialogTitle>
+          <DialogDescription>{company.profile.name}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="lim-inst">Números de WhatsApp (usando {company.instancesCount})</Label>
+            <Input id="lim-inst" inputMode="numeric" value={maxInstances} onChange={(e) => setMaxInstances(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="lim-users">Logins, com o dono (usando {company.usersCount})</Label>
+            <Input id="lim-users" inputMode="numeric" value={maxUsers} onChange={(e) => setMaxUsers(e.target.value)} />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar limites"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PasswordDialog({
+  target,
+  onClose,
+  onSave,
+}: {
+  target: { id: string; name: string } | null;
+  onClose: () => void;
+  onSave: (id: string, password: string) => Promise<string | null>;
+}) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const close = () => {
+    setPassword("");
+    setError(null);
+    onClose();
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!target) return;
+    setSaving(true);
+    const err = await onSave(target.id, password);
+    setSaving(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    close();
+  };
+
+  return (
+    <Dialog open={!!target} onOpenChange={(v) => { if (!v) close(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Trocar senha</DialogTitle>
+          <DialogDescription>Nova senha de {target?.name}. Avise a pessoa depois.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <Input autoFocus type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Nova senha (mínimo 8 caracteres)" autoComplete="new-password" />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar senha"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AdminPanel({ viewerId }: { viewerId: string }) {
+  const co = useCompanies();
+  const [newOpen, setNewOpen] = useState(false);
+  const [limitsFor, setLimitsFor] = useState<CompanyRow | null>(null);
+  const [pwTarget, setPwTarget] = useState<{ id: string; name: string } | null>(null);
+  const [openTeam, setOpenTeam] = useState<CompanyRow | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const act = async (p: Promise<string | null>) => setNotice(await p);
+
+  if (openTeam) {
+    return (
+      <div className="h-full">
+        <div className="mx-auto max-w-3xl px-4 pt-4 sm:px-6">
+          <Button variant="ghost" size="sm" className="-ml-2 gap-1.5 text-muted-foreground" onClick={() => { setOpenTeam(null); void co.reload(); }}>
+            <ArrowLeft className="size-4" /> Todos os clientes
+          </Button>
+        </div>
+        <TeamPanel companyId={openTeam.profile.id} companyName={openTeam.profile.name} viewerRole="master" viewerId={viewerId} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto h-full max-w-4xl overflow-y-auto px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <ShieldCheck className="size-5 text-primary" />
             <h1 className="text-lg font-semibold text-foreground">Painel Admin</h1>
           </div>
-          <p className="mt-1 max-w-md text-sm text-muted-foreground">
-            Cadastre os clientes que compraram acesso ao Connect Hub Pro — individuais ou empresas
-            (que depois criam o login dos próprios funcionários).
+          <p className="mt-1 max-w-lg text-sm text-muted-foreground">
+            Todos os clientes e empresas. Você controla limites, suspensão, senhas e enxerga a equipe de cada um.
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="gap-1.5">
+        <Button onClick={() => setNewOpen(true)} className="gap-1.5">
           <Plus className="size-4" />
           Novo cliente
         </Button>
       </div>
 
-      <div className="mt-3 rounded-lg border border-dashed border-border bg-accent/40 px-3 py-2.5 text-xs text-muted-foreground">
-        Contas de verdade (Supabase) — o cliente já entra com esse usuário e senha de qualquer
-        dispositivo. "Remover" tira o cadastro daqui; o login em si só é apagado por completo numa
-        próxima etapa (precisa de uma chave mais sensível do Supabase) — por enquanto, desativar é o
-        jeito confiável de bloquear o acesso de alguém.
-      </div>
-
-      {error && (
+      {(notice || co.error) && (
         <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
-          Não consegui carregar os clientes: {error}
+          {notice ?? `Não consegui carregar os clientes: ${co.error}`}
         </div>
       )}
 
-      {loading ? (
+      {co.loading ? (
         <p className="mt-10 text-center text-sm text-muted-foreground">Carregando...</p>
-      ) : accounts.length === 0 ? (
+      ) : co.companies.length === 0 ? (
         <div className="mt-10 flex flex-col items-center text-center text-muted-foreground">
           <ShieldCheck className="size-8" />
           <p className="mt-3 text-sm font-medium text-foreground">Nenhum cliente cadastrado ainda</p>
           <p className="mt-1 max-w-xs text-sm">Clique em "Novo cliente" para criar o primeiro acesso.</p>
         </div>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Usuário</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-9" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {accounts.map((acc) => (
-                <TableRow key={acc.id}>
-                  <TableCell className="font-medium text-foreground">{acc.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{acc.username}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="gap-1 font-normal">
-                      {acc.account_type === "empresa" ? <Building2 className="size-3" /> : <User className="size-3" />}
-                      {acc.account_type === "empresa" ? "Empresa" : "Individual"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
+        <ul className="mt-4 flex flex-col gap-3">
+          {co.companies.map((c) => {
+            const p = c.profile;
+            const status = !p.active ? "Inativo" : c.suspended ? "Suspenso" : "Ativo";
+            return (
+              <li key={p.id} className="rounded-lg border border-border p-3.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <Switch checked={acc.active} onCheckedChange={() => toggleActive(acc.id)} aria-label={`Ativar/desativar ${acc.name}`} />
-                      <span className="text-xs text-muted-foreground">{acc.active ? "Ativo" : "Inativo"}</span>
+                      {p.account_type === "empresa" ? <Building2 className="size-4 shrink-0 text-muted-foreground" /> : <User className="size-4 shrink-0 text-muted-foreground" />}
+                      <p className="truncate text-sm font-semibold text-foreground">{p.name}</p>
+                      <Badge variant={status === "Ativo" ? "secondary" : "destructive"} className="font-normal">
+                        {status}
+                      </Badge>
                     </div>
-                  </TableCell>
-                  <TableCell>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      usuário {p.username} · {c.usersCount} de {c.maxUsers} logins · {c.instancesCount} de {c.maxInstances} números
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {p.account_type === "empresa" && (
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpenTeam(c)}>
+                        <UsersRound className="size-4" /> Equipe
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setLimitsFor(c)}>
+                      <SlidersHorizontal className="size-4" /> Limites
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => {
+                        const msg = c.suspended
+                          ? `Reativar o acesso de ${p.name}?`
+                          : `Suspender ${p.name}? Todos da empresa são desconectados em até 1 minuto e não conseguem entrar.`;
+                        if (window.confirm(msg)) void act(co.setSuspended(p.id, !c.suspended));
+                      }}
+                    >
+                      {c.suspended ? <Play className="size-4" /> : <Pause className="size-4" />}
+                      {c.suspended ? "Reativar" : "Suspender"}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label={`Trocar senha de ${p.name}`} onClick={() => setPwTarget({ id: p.id, name: p.name })}>
+                      <KeyRound className="size-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="size-8 text-muted-foreground hover:text-destructive"
-                      aria-label={`Remover ${acc.name}`}
-                      onClick={() => removeAccount(acc.id)}
+                      aria-label={`Remover ${p.name}`}
+                      onClick={() => {
+                        if (window.confirm(`Remover ${p.name} e TODA a equipe dessa empresa? Os logins são apagados e não dá pra desfazer.`)) {
+                          void act(co.removeCompany(p.id));
+                        }
+                      }}
                     >
                       <Trash2 className="size-4" />
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-      <NewAccountDialog open={dialogOpen} onOpenChange={setDialogOpen} addAccount={addAccount} />
+      <NewCompanyDialog open={newOpen} onOpenChange={setNewOpen} onSave={co.addCompany} />
+      {limitsFor && <LimitsDialog key={limitsFor.profile.id} company={limitsFor} onClose={() => setLimitsFor(null)} onSave={co.setLimits} />}
+      <PasswordDialog target={pwTarget} onClose={() => setPwTarget(null)} onSave={co.setPassword} />
     </div>
   );
 }

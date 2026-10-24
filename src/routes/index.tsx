@@ -10,9 +10,10 @@ import { SettingsPanel } from "@/components/hub/SettingsPanel";
 import { HomePanel } from "@/components/hub/HomePanel";
 import { ContactsPage } from "@/components/hub/ContactsPage";
 import { AdminPanel } from "@/components/hub/AdminPanel";
+import { TeamPanel } from "@/components/hub/TeamPanel";
 import { useHub } from "@/hooks/useHub";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth, type ClientInstanceRow, type Profile } from "@/hooks/useAuth";
+import { useAuth, type ClientInstanceRow, type Profile, type Role } from "@/hooks/useAuth";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { MAX_INSTANCES } from "@/data/mock";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -52,18 +53,20 @@ function Hub() {
         instances={auth.instances}
         refetchInstances={auth.refetchInstances}
         canManageInstances={auth.canManageInstances}
+        canManageTeam={auth.canManageTeam}
+        role={auth.role}
         ownerProfileId={auth.ownerProfileId}
       />
     </AuthGate>
   );
 }
 
-function roleLabel(profile: Profile | null) {
+function roleLabel(profile: Profile | null, role: Role | null) {
   if (!profile) return "";
-  if (profile.is_platform_admin) return "Administrador";
-  if (profile.account_type === "empresa") return "Empresa";
-  if (profile.account_type === "empresa_employee") return "Atendente";
-  return "Cliente";
+  if (role === "master") return "Administrador";
+  if (role === "manager") return "Gerente / RH";
+  if (role === "agent") return "Atendente";
+  return profile.account_type === "empresa" ? "Empresa" : "Cliente";
 }
 
 function HubShell({
@@ -72,6 +75,8 @@ function HubShell({
   instances: clientInstances,
   refetchInstances,
   canManageInstances,
+  canManageTeam,
+  role,
   ownerProfileId,
 }: {
   onLogout: () => void;
@@ -79,6 +84,8 @@ function HubShell({
   instances: ClientInstanceRow[];
   refetchInstances: () => Promise<void>;
   canManageInstances: boolean;
+  canManageTeam: boolean;
+  role: Role | null;
   ownerProfileId: string | null;
 }) {
   const hub = useHub(clientInstances);
@@ -127,9 +134,10 @@ function HubShell({
       unread={hub.totalUnread}
       onLogout={onLogout}
       profileName={profile?.name ?? ""}
-      profileRole={roleLabel(profile)}
+      profileRole={roleLabel(profile, role)}
       systemOk={hub.instances.every((i) => i.status === "connected")}
       isAdmin={isAdmin}
+      canManageTeam={canManageTeam}
     />
   );
 
@@ -141,7 +149,7 @@ function HubShell({
         {/* Mobile: primary navigation lives in a fixed bottom bar (thumb reach,
             always visible) instead of a hamburger you have to open first. */}
         {!mobileChatOpen && (
-          <MobileTabBar active={nav} onChange={handleNav} unread={hub.totalUnread} />
+          <MobileTabBar active={nav} onChange={handleNav} unread={hub.totalUnread} canManageTeam={canManageTeam} />
         )}
 
         {/* The hamburger in TopBar now opens just the account actions that
@@ -250,7 +258,11 @@ function HubShell({
               {nav === "settings" ? (
                 <SettingsPanel />
               ) : nav === "admin" ? (
-                isAdmin ? <AdminPanel /> : null
+                isAdmin && profile ? <AdminPanel viewerId={profile.id} /> : null
+              ) : nav === "team" ? (
+                canManageTeam && profile && ownerProfileId && role ? (
+                  <TeamPanel companyId={ownerProfileId} viewerRole={role} viewerId={profile.id} />
+                ) : null
               ) : nav === "directory" ? (
                 <ContactsPage
                   contacts={hub.allContacts}

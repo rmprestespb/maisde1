@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createWhatsAppInstance, getWhatsAppInstance, reconnectInstanceQr } from "@/lib/evolution";
-import { supabase } from "@/lib/supabase";
 import type { ClientInstanceRow } from "@/hooks/useAuth";
 import { CheckCircle2, Loader2, Phone, Plus, QrCode } from "lucide-react";
 
@@ -47,7 +46,7 @@ function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 6);
 }
 
-export function QrModal({ open, onOpenChange, existing, max, canManage, ownerProfileId, onChanged }: Props) {
+export function QrModal({ open, onOpenChange, existing, max, canManage, onChanged }: Props) {
   const [step, setStep] = useState<Step>("list");
   const [label, setLabel] = useState("");
   const [instanceName, setInstanceName] = useState<string | null>(null);
@@ -82,9 +81,8 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
 
   useEffect(() => stopPolling, []);
 
-  // saveRow=false quando é só reconectar um número que já está salvo na conta:
-  // aí não insere de novo em client_instances, só avisa que conectou.
-  function startPolling(name: string, saveRow = true) {
+  // Acompanha o pareamento até o número conectar.
+  function startPolling(name: string) {
     stopPolling();
     let tries = 0;
     pollTimer.current = window.setInterval(async () => {
@@ -93,24 +91,8 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
         const inst = await getWhatsAppInstance({ data: { instanceName: name } });
         if (inst?.status === "connected") {
           stopPolling();
-          if (!saveRow) {
-            setStep("connected");
-            onChanged();
-            return;
-          }
-          if (!ownerProfileId) {
-            setErrorMsg("Não foi possível identificar sua conta pra salvar o número. Tenta de novo.");
-            setStep("error");
-            return;
-          }
-          const { error } = await supabase
-            .from("client_instances")
-            .insert({ profile_id: ownerProfileId, instance_name: name, label: label.trim() || name });
-          if (error) {
-            setErrorMsg(`O WhatsApp conectou, mas não deu pra salvar o número: ${error.message}`);
-            setStep("error");
-            return;
-          }
+          // O número já foi registrado na conta pelo servidor quando foi criado
+          // (createWhatsAppInstance) — aqui só avisa que conectou.
           setStep("connected");
           onChanged();
           return;
@@ -134,7 +116,7 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
     const name = `${slugify(trimmed) || "whatsapp"}-${randomSuffix()}`;
     setInstanceName(name);
     try {
-      const created = await createWhatsAppInstance({ data: { instanceName: name } });
+      const created = await createWhatsAppInstance({ data: { instanceName: name, label: trimmed } });
       if (created.status === "created-with-qr") {
         setQrCodeBase64(created.qrCodeBase64);
         setPairingCode(created.pairingCode);
@@ -178,7 +160,7 @@ export function QrModal({ open, onOpenChange, existing, max, canManage, ownerPro
         setQrCodeBase64(r.qrCodeBase64);
         setPairingCode(r.pairingCode);
         setStep("qr");
-        startPolling(inst.instance_name, false);
+        startPolling(inst.instance_name);
         return;
       }
       if (r.status === "already-connected") {

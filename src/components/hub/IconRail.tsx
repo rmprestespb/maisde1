@@ -11,9 +11,10 @@ import {
   Moon,
   ShieldCheck,
   Sun,
+  UsersRound,
 } from "lucide-react";
 
-export type NavKey = "home" | "contacts" | "directory" | "instances" | "settings" | "admin";
+export type NavKey = "home" | "contacts" | "directory" | "instances" | "team" | "settings" | "admin";
 
 // "contacts" continua sendo a chave da tela de conversas (lista + chat) —
 // só o nome mostrado mudou para "Conversas".
@@ -22,6 +23,7 @@ export const navItems: { key: NavKey; label: string; icon: typeof Home }[] = [
   { key: "contacts", label: "Conversas", icon: MessageSquare },
   { key: "directory", label: "Contatos", icon: Users },
   { key: "instances", label: "Números", icon: QrCode },
+  { key: "team", label: "Equipe", icon: UsersRound },
   { key: "settings", label: "Configurações", icon: Settings },
 ];
 
@@ -51,6 +53,8 @@ interface Props {
   profileRole: string;
   systemOk: boolean;
   isAdmin: boolean;
+  // Dono, gerente e master veem "Equipe" (pessoas e grupos).
+  canManageTeam: boolean;
   className?: string;
 }
 
@@ -76,6 +80,7 @@ export function IconRail({
   profileRole,
   systemOk,
   isAdmin,
+  canManageTeam,
   className,
 }: Props) {
   const { profile } = useProfile();
@@ -109,7 +114,7 @@ export function IconRail({
       </div>
 
       <ul className="mt-4 flex flex-col gap-1">
-        {navItems.map((item) => {
+        {navItems.filter((item) => item.key !== "team" || canManageTeam).map((item) => {
           const isActive = active === item.key;
           return (
             <li key={item.key}>

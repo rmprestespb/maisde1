@@ -1,87 +1,103 @@
 import { useCallback, useEffect, useState } from "react";
-import { supabase, usernameToEmail, createEphemeralClient } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import type { Profile } from "@/hooks/useAuth";
+import { adminSetPassword, createAccount, deleteAccount, setAccountActive, updateCompany } from "@/lib/accounts";
 
 export type AccountType = "individual" | "empresa";
 
+export interface CompanyRow {
+  profile: Profile;
+  maxInstances: number;
+  maxUsers: number;
+  suspended: boolean;
+  note: string;
+  usersCount: number; // logins no total (dono + equipe)
+  instancesCount: number;
+}
+
+function msg(e: unknown): string {
+  return e instanceof Error ? e.message : "Algo deu errado. Tente de novo.";
+}
+
 /**
- * Cadastro de clientes (quem comprou acesso) — painel do admin (você) e,
- * mais pra frente, do dono de empresa gerenciando funcionários. Cria contas
- * de verdade no Supabase Auth: cada cliente entra com o usuário/senha
- * criados aqui, de qualquer dispositivo.
+ * Painel do master: todas as empresas/clientes, com limites, suspensão e
+ * contagem de uso. Leitura direto do banco (o master enxerga tudo pelas
+ * regras RLS); toda alteração passa pelo servidor.
  */
-export function useAdminAccounts(companyIdFilter?: string) {
-  const [accounts, setAccounts] = useState<Profile[]>([]);
+export function useCompanies() {
+  const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
-    let query = supabase.from("profiles").select("*").order("created_at", { ascending: false });
-    if (companyIdFilter) {
-      query = query.eq("company_id", companyIdFilter);
-    } else {
-      query = query.is("company_id", null);
+    const [owners, staff, settings, insts] = await Promise.all([
+      supabase.from("profiles").select("*").is("company_id", null).eq("is_platform_admin", false).order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, company_id").not("company_id", "is", null),
+      supabase.from("company_settings").select("*"),
+      supabase.from("client_instances").select("profile_id"),
+    ]);
+    const firstError = owners.error ?? staff.error ?? settings.error ?? insts.error;
+    if (firstError) {
+      setError(firstError.message);
+      setLoading(false);
+      return;
     }
-    const { data, error } = await query;
-    if (error) {
-      setError(error.message);
-    } else {
-      setError(null);
-      setAccounts((data ?? []) as Profile[]);
-    }
+    const count = (rows: { [k: string]: unknown }[] | null, key: string) => {
+      const m = new Map<string, number>();
+      for (const r of rows ?? []) {
+        const id = r[key] as string;
+        m.set(id, (m.get(id) ?? 0) + 1);
+      }
+      return m;
+    };
+    const staffBy = count(staff.data, "company_id");
+    const instBy = count(insts.data, "profile_id");
+    const setBy = new Map((settings.data ?? []).map((s) => [s.company_id as string, s]));
+    setError(null);
+    setCompanies(
+      ((owners.data ?? []) as Profile[]).map((p) => {
+        const st = setBy.get(p.id);
+        return {
+          profile: p,
+          maxInstances: st?.max_instances ?? 1,
+          maxUsers: st?.max_users ?? 5,
+          suspended: !!st?.suspended,
+          note: st?.note ?? "",
+          usersCount: 1 + (staffBy.get(p.id) ?? 0),
+          instancesCount: instBy.get(p.id) ?? 0,
+        };
+      }),
+    );
     setLoading(false);
-  }, [companyIdFilter]);
+  }, []);
 
   useEffect(() => {
-    reload();
+    void reload();
   }, [reload]);
 
-  async function addAccount(
-    type: AccountType,
-    name: string,
-    username: string,
-    password: string,
-  ): Promise<string | null> {
-    // Cliente descartável: criar a conta faz login automático como o novo
-    // usuário — se fosse no cliente principal, isso derrubaria a sua sessão.
-    const ephemeral = createEphemeralClient();
-    const { data, error: signUpError } = await ephemeral.auth.signUp({
-      email: usernameToEmail(username),
-      password,
-    });
-    if (signUpError) return signUpError.message;
-    const newUserId = data.user?.id;
-    if (!newUserId) return "Não foi possível criar o usuário (tente novamente).";
-
-    const { error: profileError } = await ephemeral.from("profiles").insert({
-      id: newUserId,
-      account_type: type,
-      name: name.trim(),
-      username: username.trim(),
-      company_id: companyIdFilter ?? null,
-      active: true,
-    });
-    if (profileError) return profileError.message;
-
-    await reload();
-    return null;
+  async function run(fn: () => Promise<unknown>): Promise<string | null> {
+    try {
+      await fn();
+      await reload();
+      return null;
+    } catch (e) {
+      return msg(e);
+    }
   }
 
-  async function toggleActive(id: string) {
-    const target = accounts.find((a) => a.id === id);
-    if (!target) return;
-    const { error } = await supabase.from("profiles").update({ active: !target.active }).eq("id", id);
-    if (!error) await reload();
-  }
-
-  async function removeAccount(id: string) {
-    // Remove o cadastro do app. O login em si (Supabase Auth) fica órfão —
-    // apagar de verdade exige a service_role key, que ainda não está
-    // conectada (guardada só no servidor, próxima etapa).
-    const { error } = await supabase.from("profiles").delete().eq("id", id);
-    if (!error) await reload();
-  }
-
-  return { accounts, loading, error, addAccount, toggleActive, removeAccount, reload };
+  return {
+    companies,
+    loading,
+    error,
+    reload,
+    addCompany: (input: { accountType: AccountType; name: string; username: string; password: string; maxInstances: number; maxUsers: number }) =>
+      run(() => createAccount({ data: { kind: "owner", ...input } })),
+    setLimits: (companyId: string, maxInstances: number, maxUsers: number) =>
+      run(() => updateCompany({ data: { companyId, maxInstances, maxUsers } })),
+    setSuspended: (companyId: string, suspended: boolean) => run(() => updateCompany({ data: { companyId, suspended } })),
+    setActive: (targetId: string, active: boolean) => run(() => setAccountActive({ data: { targetId, active } })),
+    setPassword: (targetId: string, password: string) => run(() => adminSetPassword({ data: { targetId, password } })),
+    removeCompany: (targetId: string) => run(() => deleteAccount({ data: { targetId } })),
+  };
 }

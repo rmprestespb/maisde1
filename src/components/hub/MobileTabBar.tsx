@@ -5,6 +5,7 @@ interface Props {
   active: NavKey;
   onChange: (key: NavKey) => void;
   unread: number;
+  canManageTeam: boolean;
 }
 
 /**
@@ -13,13 +14,13 @@ interface Props {
  * same destinations live here instead — a fixed bottom bar, the pattern
  * WhatsApp/most mobile apps use, always visible, no drawer to open first.
  */
-export function MobileTabBar({ active, onChange, unread }: Props) {
+export function MobileTabBar({ active, onChange, unread, canManageTeam }: Props) {
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-30 flex items-stretch justify-around border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
       aria-label="Navegação principal"
     >
-      {navItems.map((item) => (
+      {navItems.filter((item) => item.key !== "team" || canManageTeam).map((item) => (
         <button
           key={item.key}
           onClick={() => onChange(item.key)}

@@ -45,3 +45,30 @@ export function createEphemeralClient() {
     },
   });
 }
+
+// Toda chamada às funções do servidor (/_serverFn/...) leva o token de login
+// junto. É assim que o servidor sabe quem está pedindo e se a pessoa pode usar
+// aquele número / fazer aquela ação (ver server-auth.ts). Sem login, a chamada
+// vai sem token e o servidor recusa.
+if (typeof window !== "undefined" && !(window as unknown as { __hubAuthFetch?: boolean }).__hubAuthFetch) {
+  (window as unknown as { __hubAuthFetch?: boolean }).__hubAuthFetch = true;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    try {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/_serverFn/")) {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (token) {
+          const headers = new Headers(input instanceof Request ? input.headers : undefined);
+          if (init?.headers) new Headers(init.headers).forEach((v, k) => headers.set(k, v));
+          headers.set("Authorization", `Bearer ${token}`);
+          return originalFetch(input, { ...init, headers });
+        }
+      }
+    } catch {
+      // Se algo falhar ao anexar o token, segue sem ele (o servidor decide).
+    }
+    return originalFetch(input, init);
+  };
+}

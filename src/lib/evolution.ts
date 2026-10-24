@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Contact, Instance } from "@/types/crm";
+import { adminClient, forgetInstanceCache, requireInstance, requireRole } from "@/lib/server-auth";
 
 // Tudo neste arquivo roda só no servidor (TanStack Start compila as
 // createServerFn como uma rota separada) — é o único lugar que enxerga
@@ -39,6 +40,28 @@ function evolutionConfig(overrideInstanceName?: string) {
     );
   }
   return { baseUrl, apiKey, instanceName };
+}
+
+// Porta de segurança: antes de falar com a Evolution API, confere quem está
+// chamando e se essa pessoa pode usar o número pedido (ver server-auth.ts).
+async function evolutionConfigFor(instanceName?: string) {
+  await requireInstance(instanceName);
+  return evolutionConfig(instanceName);
+}
+
+// Conectar/reconectar/destravar número: só o dono da empresa (ou o master).
+async function evolutionConfigManage(instanceName?: string) {
+  const ctx = await requireInstance(instanceName);
+  if (ctx.role !== "master" && ctx.role !== "owner") {
+    throw new Error("Só o dono da empresa pode conectar ou reconectar números.");
+  }
+  return evolutionConfig(instanceName);
+}
+
+// Diagnóstico: só o master (dono do sistema) pode usar.
+async function evolutionConfigMaster() {
+  await requireRole(["master"]);
+  return evolutionConfig();
 }
 
 // DDI -> país/bandeira. Cobre os casos mais comuns pro público do Connect Hub
@@ -90,7 +113,7 @@ type WithInstance = { instanceName?: string };
 export const getWhatsAppInstance = createServerFn({ method: "GET" })
   .validator((data: WithInstance | undefined) => data ?? {})
   .handler(async ({ data }): Promise<Instance | null> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey };
 
     const stateRes = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
@@ -174,7 +197,7 @@ type EvolutionContactRaw = {
 export const getWhatsAppContacts = createServerFn({ method: "GET" })
   .validator((data: WithInstance | undefined) => data ?? {})
   .handler(async ({ data }): Promise<Contact[]> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
 
     const res = await fetch(`${baseUrl}/chat/findContacts/${instanceName}`, {
@@ -240,7 +263,7 @@ type SendTextResult = {
 export const sendWhatsAppMessage = createServerFn({ method: "POST" })
   .validator((data: SendTextInput) => data)
   .handler(async ({ data }): Promise<SendTextResult> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
     const number = data.to.replace(/\D/g, "");
     if (!number) {
@@ -295,7 +318,7 @@ type SendAudioInput = { to: string; audioUrl: string } & WithInstance;
 export const sendWhatsAppAudio = createServerFn({ method: "POST" })
   .validator((data: SendAudioInput) => data)
   .handler(async ({ data }): Promise<SendTextResult> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
     const number = data.to.replace(/\D/g, "");
     if (!number) throw new Error("Número inválido pra enviar áudio.");
@@ -350,7 +373,7 @@ type SendMediaInput = {
 export const sendWhatsAppMedia = createServerFn({ method: "POST" })
   .validator((data: SendMediaInput) => data)
   .handler(async ({ data }): Promise<SendTextResult> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
     const number = data.to.replace(/\D/g, "");
     if (!number) throw new Error("Número inválido pra enviar mídia.");
@@ -443,7 +466,7 @@ const ACK_RANK: Record<MessageAckStatus, number> = { sent: 1, delivered: 2, read
 export const getMessageStatus = createServerFn({ method: "POST" })
   .validator((data: GetMessageStatusInput) => data)
   .handler(async ({ data }): Promise<MessageAckStatus | null> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
 
     const res = await fetch(`${baseUrl}/chat/findMessages/${instanceName}`, {
@@ -552,7 +575,7 @@ function detectMedia(message: Record<string, unknown>): {
 export const getLatestChats = createServerFn({ method: "GET" })
   .validator((data: WithInstance | undefined) => data ?? {})
   .handler(async ({ data }): Promise<ChatPreview[]> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
 
     // CORRECAO — antes usava /chat/findChats, que com milhares de contatos
@@ -662,7 +685,7 @@ type GetMediaInput = { messageId: string } & WithInstance;
 export const getWhatsAppMedia = createServerFn({ method: "POST" })
   .validator((data: GetMediaInput) => data)
   .handler(async ({ data }): Promise<WhatsAppMediaFile> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const res = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instanceName}`, {
       method: "POST",
       headers: { apikey: apiKey, "Content-Type": "application/json" },
@@ -734,7 +757,7 @@ function recordsOf(json: unknown): Record<string, unknown>[] {
 export const getConversationHistory = createServerFn({ method: "POST" })
   .validator((data: HistoryInput) => data)
   .handler(async ({ data }): Promise<HistoryItem[]> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigFor(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
     const phoneJid = data.remoteJid;
 
@@ -813,7 +836,7 @@ type ReconnectQrResult =
 export const reconnectInstanceQr = createServerFn({ method: "GET" })
   .validator((data: WithInstance | undefined) => data ?? {})
   .handler(async ({ data }): Promise<ReconnectQrResult> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigManage(data.instanceName);
     const headers = { apikey: apiKey };
 
     const res = await fetch(`${baseUrl}/instance/connect/${instanceName}`, { headers });
@@ -847,7 +870,7 @@ export const reconnectInstanceQr = createServerFn({ method: "GET" })
   },
 );
 
-type CreateInstanceInput = { instanceName: string };
+type CreateInstanceInput = { instanceName: string; label?: string };
 
 type CreateInstanceResult =
   | { status: "created-with-qr"; instanceName: string; qrCodeBase64: string; pairingCode: string | null }
@@ -855,24 +878,58 @@ type CreateInstanceResult =
   | { status: "already-exists"; instanceName: string };
 
 /**
- * ===== ADIÇÃO — criar uma instância nova (um número novo pra um cliente) =====
- * Chama /instance/create da própria Evolution API — ainda NÃO testado ao
- * vivo (igual ficou documentado com sendWhatsAppAudio antes de testar: o
- * formato do corpo é o padrão oficial da Evolution API v2
- * `{instanceName, qrcode, integration: "WHATSAPP-BAILEYS"}`, mas essa
- * instalação específica já mostrou uma vez que usa um formato diferente do
- * documentado oficialmente — quando o primeiro teste real rodar, confirmar
- * e ajustar aqui do mesmo jeito que foi ajustado o /message/sendMedia).
- * "baseUrl"/"apiKey" continuam os mesmos (um servidor só, várias
- * instâncias) — só o nome da instância muda por cliente.
+ * ===== Criar uma instância nova (um número novo) =====
+ * Só o dono da empresa (ou o master). O servidor:
+ *  1) confere o limite de números do plano da empresa;
+ *  2) cria a instância na Evolution API;
+ *  3) registra o número na conta (client_instances) — o navegador não grava
+ *     mais isso sozinho, pra ninguém "adotar" o número de outra empresa.
+ * Chama /instance/create da Evolution API v2:
+ * `{instanceName, qrcode, integration: "WHATSAPP-BAILEYS"}`.
  */
 export const createWhatsAppInstance = createServerFn({ method: "POST" })
   .validator((data: CreateInstanceInput) => data)
   .handler(async ({ data }): Promise<CreateInstanceResult> => {
+    const ctx = await requireRole(["master", "owner"]);
     const { baseUrl, apiKey } = evolutionConfig();
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
-    const instanceName = data.instanceName.trim();
-    if (!instanceName) throw new Error("Nome da instância não pode ser vazio.");
+    const instanceName = (data.instanceName ?? "").trim();
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$/.test(instanceName)) {
+      throw new Error("Nome do número inválido (use letras, números e hífen).");
+    }
+    const label = (data.label ?? "").trim().slice(0, 60) || instanceName;
+
+    const admin = adminClient();
+    const { data: existing, error: exErr } = await admin
+      .from("client_instances")
+      .select("profile_id")
+      .eq("instance_name", instanceName)
+      .maybeSingle();
+    if (exErr) throw new Error("Não consegui conferir o número: " + exErr.message);
+    if (existing && existing.profile_id !== ctx.ownerId) {
+      throw new Error("Esse nome de número já está em uso. Tente outro nome.");
+    }
+
+    // Limite do plano (o master não tem limite).
+    if (!existing && ctx.role !== "master") {
+      const [{ data: settings }, { count }] = await Promise.all([
+        admin.from("company_settings").select("max_instances").eq("company_id", ctx.ownerId).maybeSingle(),
+        admin.from("client_instances").select("instance_name", { count: "exact", head: true }).eq("profile_id", ctx.ownerId),
+      ]);
+      const max = settings?.max_instances ?? 1;
+      if ((count ?? 0) >= max) {
+        throw new Error(`Seu plano permite ${max} número${max === 1 ? "" : "s"} de WhatsApp. Fale com o administrador para ampliar.`);
+      }
+    }
+
+    const register = async () => {
+      if (existing) return;
+      const { error } = await admin
+        .from("client_instances")
+        .insert({ profile_id: ctx.ownerId, instance_name: instanceName, label });
+      if (error) throw new Error("Não consegui salvar o número: " + error.message);
+      forgetInstanceCache();
+    };
 
     const res = await fetch(`${baseUrl}/instance/create`, {
       method: "POST",
@@ -881,14 +938,15 @@ export const createWhatsAppInstance = createServerFn({ method: "POST" })
     });
 
     if (res.status === 403 || res.status === 409) {
-      // Essa instância já existe — trata como "já pronta" em vez de erro,
-      // pra quem chamar poder simplesmente seguir pro QR (reconnectInstanceQr).
+      // Já existe na Evolution. Só segue se o número já é desta conta.
+      if (!existing) throw new Error("Esse nome de número já está em uso. Tente outro nome.");
       return { status: "already-exists", instanceName };
     }
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`Evolution API respondeu ${res.status} em /instance/create${errText ? ": " + errText : ""}`);
     }
+    await register();
 
     const json = (await res.json()) as unknown;
     const rec = (json ?? {}) as Record<string, unknown>;
@@ -936,7 +994,7 @@ type RestartInstanceResult = {
 export const restartInstance = createServerFn({ method: "POST" })
   .validator((data: WithInstance | undefined) => data ?? {})
   .handler(async ({ data }): Promise<RestartInstanceResult> => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig(data.instanceName);
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigManage(data.instanceName);
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
 
     // Tentativa 1 (mantida pra registro): restart dedicado. Confirmado 404
@@ -1011,7 +1069,7 @@ export const restartInstance = createServerFn({ method: "POST" })
 export const debugFindMessagesRaw = createServerFn({ method: "POST" })
   .validator((data: GetMessageStatusInput) => data)
   .handler(async ({ data }) => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig();
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigMaster();
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
     const body = JSON.stringify({ where: { key: { remoteJid: data.remoteJid, id: data.messageId } } });
     try {
@@ -1041,7 +1099,7 @@ export const debugFindMessagesRaw = createServerFn({ method: "POST" })
  * e confirmado.
  */
 export const debugFetchContactsRaw = createServerFn({ method: "GET" }).handler(async () => {
-  const { baseUrl, apiKey, instanceName } = evolutionConfig();
+  const { baseUrl, apiKey, instanceName } = await evolutionConfigMaster();
   const headers = { apikey: apiKey, "Content-Type": "application/json" };
 
   async function safePost(path: string) {
@@ -1086,7 +1144,7 @@ type DebugSendInput = { targetNumber?: string };
 export const debugSendSelfTest = createServerFn({ method: "POST" })
   .validator((data: DebugSendInput | undefined) => data ?? {})
   .handler(async ({ data }) => {
-    const { baseUrl, apiKey, instanceName } = evolutionConfig();
+    const { baseUrl, apiKey, instanceName } = await evolutionConfigMaster();
     const headers = { apikey: apiKey, "Content-Type": "application/json" };
 
     let number = (data.targetNumber ?? "").replace(/\D/g, "");
