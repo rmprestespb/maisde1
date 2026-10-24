@@ -31,7 +31,7 @@ function Shell({ children }: { children: ReactNode }) {
         style={{
           aspectRatio: "1113 / 941",
           maxWidth: "calc(100vw - 28rem)",
-          backgroundImage: "url(/brand/auth-bg-v3.jpg)",
+          backgroundImage: "url(/brand/auth-bg-v4.jpg)",
           backgroundSize: "contain",
           backgroundPosition: "left center",
           backgroundRepeat: "no-repeat",
