@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils";
 import { instanceAccent } from "@/lib/instance-colors";
 import { relativeTime } from "@/hooks/useHub";
 import type { Contact, Instance, InstanceStatus } from "@/types/crm";
+import type { Tag } from "@/hooks/useTags";
+import { GoogleAgendaCard } from "./GoogleAgendaCard";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -23,6 +25,8 @@ interface Props {
   onAddNumber: () => void;
   onOpenContact: (id: string) => void;
   onOpenNumber: (instanceId: string) => void;
+  tags?: Tag[];
+  onOpenTag?: (tagId: string) => void;
 }
 
 const statusLabel: Record<InstanceStatus, string> = {
@@ -93,6 +97,8 @@ export function HomePanel({
   onAddNumber,
   onOpenContact,
   onOpenNumber,
+  tags = [],
+  onOpenTag,
 }: Props) {
   const firstName = name.split(" ")[0] || name;
   const activeCount = instances.filter((i) => i.status === "connected").length;
@@ -251,6 +257,39 @@ export function HomePanel({
             )}
           </ul>
         </section>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-3 text-base font-semibold text-foreground">Etiquetas</h2>
+          {tags.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              Você ainda não criou etiquetas. Abra uma conversa e use o ícone de etiqueta no topo para criar a primeira.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {tags.map((t) => {
+                const count = contacts.filter((c) => (c.tag_ids ?? []).includes(t.id)).length;
+                return (
+                  <li key={t.id}>
+                    <button
+                      onClick={() => onOpenTag?.(t.id)}
+                      className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                    >
+                      <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: t.color }} aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate font-medium text-foreground">{t.name}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {count} {count === 1 ? "contato" : "contatos"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <GoogleAgendaCard />
       </div>
     </div>
   );

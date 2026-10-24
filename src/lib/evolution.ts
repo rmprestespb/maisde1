@@ -13,7 +13,6 @@ import type { Contact, Instance } from "@/types/crm";
 // próprio ambiente da VPS).
 const LOCAL_DEV_FALLBACK = {
   baseUrl: "http://localhost:8081",
-  apiKey: "ed66d1d891ef1b5586858edb24ada2a85be5e97cf3f7b009",
   instanceName: "connecthubpro",
 };
 
@@ -27,7 +26,7 @@ const LOCAL_DEV_FALLBACK = {
 function evolutionConfig(overrideInstanceName?: string) {
   const env = import.meta.env as unknown as Record<string, string | undefined>;
   const baseUrl = env["EVOLUTION_API_URL"] || process.env["EVOLUTION_API_URL"] || LOCAL_DEV_FALLBACK.baseUrl;
-  const apiKey = env["EVOLUTION_API_KEY"] || process.env["EVOLUTION_API_KEY"] || LOCAL_DEV_FALLBACK.apiKey;
+  const apiKey = env["EVOLUTION_API_KEY"] || process.env["EVOLUTION_API_KEY"];
   const instanceName =
     overrideInstanceName ||
     env["EVOLUTION_INSTANCE_NAME"] ||

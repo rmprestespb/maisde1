@@ -264,6 +264,17 @@ function HubShell({
                   instances={hub.instances}
                   contacts={hub.allContacts}
                   totalUnread={hub.totalUnread}
+                  tags={hub.tags}
+                  onOpenTag={(tagId) => {
+                    // Abre as conversas já filtradas por essa etiqueta.
+                    hub.setSearch("");
+                    hub.setFavoritesOnly(false);
+                    hub.setShowArchived(false);
+                    hub.setSelectedInstanceId(null);
+                    hub.setActiveContactId(null);
+                    hub.setTagFilter(tagId);
+                    setNav("contacts");
+                  }}
                   canAddNumber={canManageInstances}
                   onAddNumber={() => setQrOpen(true)}
                   onOpenContact={openChatWith}
