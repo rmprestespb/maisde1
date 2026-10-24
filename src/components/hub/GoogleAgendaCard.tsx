@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 // Guarda só o e-mail da agenda, no navegador (nada vai para o nosso servidor).
 const EMAIL_KEY = "hub.agendaEmail.v1";
@@ -12,7 +13,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * quem aparece é a agenda da conta Google que estiver logada neste navegador.
  * Não há login nem chave guardada pelo sistema.
  */
-export function GoogleAgendaCard() {
+export function GoogleAgendaCard({ className }: { className?: string }) {
   const [saved, setSaved] = useState("");
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
@@ -62,8 +63,8 @@ export function GoogleAgendaCard() {
   const showForm = loaded && (!saved || editing);
 
   return (
-    <section className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <section className={cn("flex flex-col rounded-xl border border-border bg-card p-4", className)}>
+      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-foreground">Agenda</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild size="sm" className="gap-1.5">
@@ -113,14 +114,14 @@ export function GoogleAgendaCard() {
           </div>
         </div>
       ) : embedUrl ? (
-        <div className="space-y-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
           <iframe
             title="Google Agenda"
             src={embedUrl}
             loading="lazy"
-            className="h-80 w-full rounded-lg border border-border bg-background"
+            className="min-h-72 w-full flex-1 rounded-lg border border-border bg-background"
           />
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
               Agenda de <span className="font-medium text-foreground">{saved}</span>. Se pedir login ou aparecer vazia,
               entre nessa conta Google neste navegador.
